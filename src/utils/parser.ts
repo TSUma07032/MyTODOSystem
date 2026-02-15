@@ -1,52 +1,75 @@
-import { v4 as uuidv4 } from 'uuid';
 import { type Task, type ParseResult } from '../types';
 
-// セクション見出しの正規形 (例: "## Today")
-const SECTION_REGEX = /^(#+)\s+(.*)$/;
-const TASK_REGEX = /^(\s*)-\s\[( |x|X)\]\s(.*?)(?:\s+\(@(\d{1,4}[/-]\d{1,2}(?:[/-]\d{1,2})?)\))?\s*$/;
-const ESTIMATE_REGEX = /[（(](.+?)[)）]/;
-
 export const parseMarkdown = (markdown: string): ParseResult => {
-  const lines = markdown.split(/\r?\n/);
+  const lines = markdown.split('\n');
   const tasks: Task[] = [];
-  const errors: string[] = [];
-  
-  // 現在のセクション名を保持する変数（初期値は "Backlog" としておきます）
-  let currentSection = "Backlog"; 
+  let currentSection = '';
 
   lines.forEach((line, index) => {
-    if (!line.trim()) return;
-
-    // ★ 見出し行の判定
-    const sectionMatch = line.match(SECTION_REGEX);
-    if (sectionMatch) {
-      currentSection = sectionMatch[2].trim(); // "Today" などを取得
-      return; // タスクではないので次へ
+    // 見出しの抽出
+    const headerMatch = line.match(/^#+\s+(.+)$/);
+    if (headerMatch) {
+      currentSection = headerMatch[1];
+      return;
     }
 
-    const match = line.match(TASK_REGEX);
+    // ★ 標準的で美しいMarkdownリストのみを許容する正規表現
+    const taskMatch = line.match(/^(\s*)-\s\[([ xX])\]\s+(.+)$/);
+    
+    if (taskMatch) {
+      const indent = Math.floor(taskMatch[1].length / 2);
+      const status = taskMatch[2].trim() ? 'done' : 'todo';
+      let text = taskMatch[3]; // ここには「タスク名 + 各種タグ」が入る
 
-    if (match) {
-      const [, spaces, statusChar, rawText, deadlineDate] = match;
-      const indentLevel = Math.floor(spaces.length / 2);
-      const isDone = statusChar.toLowerCase() === 'x';
-      const estimateMatch = rawText.match(ESTIMATE_REGEX);
+      // 1. ルーチンの隠しタグの抽出
+      const routineRegex = /\((daily|weekly):(\w+)\)/;
+      const routineMatch = text.match(routineRegex);
+      let routineType: 'daily' | 'weekly' | undefined = undefined;
+      let routineId: string | undefined = undefined;
+
+      if (routineMatch) {
+        routineType = routineMatch[1] as 'daily' | 'weekly';
+        routineId = routineMatch[2];
+        text = text.replace(routineRegex, '').trim(); 
+      }
+
+      // 2. 難易度の抽出 (★X)
+      let difficulty = 2; // デフォルトは★2
+      const diffMatch = text.match(/\(★(\d+)\)/);
+      if (diffMatch) {
+        difficulty = parseInt(diffMatch[1], 10);
+        text = text.replace(/\(★\d+\)/, '').trim();
+      }
+
+      // 3. 期限の抽出 (@MM/DD)
+      const deadlineMatch = text.match(/\(@(\d{1,2}\/\d{1,2})\)/);
+      const deadline = deadlineMatch ? deadlineMatch[1] : undefined;
+      text = text.replace(/\(@\d{1,2}\/\d{1,2}\)/, '').trim();
+
+      // 4. 見積もりの抽出 (30m) など
+      const estimateMatch = text.match(/\(([^)]+)\)$/);
       const estimate = estimateMatch ? estimateMatch[1] : undefined;
-      const cleanText = rawText.trim();
+      if (estimateMatch) {
+        text = text.replace(/\([^)]+\)$/, '').trim();
+      }
 
+      // 最後に残った text が、純粋なタスク名になる
       tasks.push({
-        id: uuidv4(),
-        text: cleanText,
-        status: isDone ? 'done' : 'todo',
-        indent: indentLevel,
-        estimate: estimate,
-        deadline: deadlineDate,
-        originalRaw: line,
+        id: `task-line-${index}`, // 行番号固定ID（DOM破壊防止）
+        text,
+        status,
+        indent,
         lineNumber: index + 1,
-        section: currentSection, // ★ ここでセクションを保存！
+        originalRaw: line,
+        estimate,
+        deadline,
+        section: currentSection,
+        routineType,
+        routineId,
+        difficulty,
       });
     }
   });
 
-  return { tasks, errors };
+  return { tasks };
 };

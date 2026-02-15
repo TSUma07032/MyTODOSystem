@@ -75,6 +75,9 @@ export default defineConfig([
 ## 入れ方
 ビルドする
 
+npm run build
+npm run preview
+
 デベロッパーツールを開く
 
 アプリの画面で F12 キー（または Ctrl + Shift + I）を押して。
