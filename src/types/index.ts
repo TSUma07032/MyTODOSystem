@@ -37,3 +37,8 @@ export interface GamificationData {
   coins: number;
   shopItems: ShopItem[];
 }
+
+export interface DailyProgress {
+  date: string; // "2024-03-20"
+  completedRoutineIds: string[]; // 完了したルーチンのIDリスト
+}

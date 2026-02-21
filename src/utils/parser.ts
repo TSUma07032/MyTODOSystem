@@ -22,7 +22,7 @@ export const parseMarkdown = (markdown: string): ParseResult => {
       let text = taskMatch[3]; // ここには「タスク名 + 各種タグ」が入る
 
       // 1. ルーチンの隠しタグの抽出
-      const routineRegex = /\((daily|weekly):(\w+)\)/;
+      const routineRegex = /\((daily|weekly):([-\w]+)\)/;
       const routineMatch = text.match(routineRegex);
       let routineType: 'daily' | 'weekly' | undefined = undefined;
       let routineId: string | undefined = undefined;
