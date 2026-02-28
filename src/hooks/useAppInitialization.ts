@@ -8,17 +8,20 @@ interface InitializationProps {
   isReady: boolean;
   readFile: (filename: string) => Promise<string | null>;
   writeFile: (filename: string, content: string) => Promise<void>;
-  initDailyProgress: (data: DailyProgress) => void;
+  initDailyProgress: (data: DailyProgress, allRoutines: Routine[]) => number;
   initGamification: (data: GamificationData) => void;
   initRoutines: (data: Routine[]) => void;
   setInput: (text: string) => void;
   setHistoryItems: (items: any[]) => void;
+  routines: Routine[]; 
+  onPenalty: (missedCount: number) => void; 
 }
 
 export const useAppInitialization = ({
   mode, isReady, readFile, writeFile,
   initDailyProgress, initGamification, initRoutines,
-  setInput, setHistoryItems
+  setInput, setHistoryItems,
+  routines, onPenalty
 }: InitializationProps) => {
 
   // 1. デイリー進捗（昨日までのチェック状態）の読み込み
@@ -27,13 +30,18 @@ export const useAppInitialization = ({
       if (!isReady) return;
       try {
         const content = await readFile('daily_progress.json');
-        if (content) initDailyProgress(JSON.parse(content));
+        if (content) {
+          const missedCount = initDailyProgress(JSON.parse(content), routines);
+          if (missedCount > 0) {
+            onPenalty(missedCount); // ペナルティを親に報告
+          }
+        }
       } catch (err) {
-        console.log("Daily progress file not found, starting fresh.");
+        console.log("Daily progress file not found.");
       }
     };
     loadDailyStatus();
-  }, [isReady]);
+  }, [isReady, routines.length > 0]);
 
   // 2. メインデータ（タスク、コイン、ルーチン）の読み込みと、日付変更時の自動注入
   useEffect(() => {

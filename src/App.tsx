@@ -146,11 +146,21 @@ function App() {
     setTimeout(() => setCopied(false), 2000); 
   };
 
+  const handlePenalty = async (missedCount: number) => {
+    const penaltyPerTask = 50; // 1つサボるごとに50コイン没収
+    const totalPenalty = missedCount * penaltyPerTask;
+    
+    await removeCoins(totalPenalty);
+    showToast(`不履行ペナルティ: -${totalPenalty} 🪙 (未達成: ${missedCount}件)`, 5); // 難易度5で赤い警告
+  };
+
+
   // 4. 初期データの読み込み (useEffect群)
   useAppInitialization({
     mode, isReady, readFile, writeFile,
     initDailyProgress, initGamification, initRoutines,
-    setInput, setHistoryItems
+    setInput, setHistoryItems,
+    routines, onPenalty: handlePenalty
   });
 
   // 5. 導出ステート (useMemo群)

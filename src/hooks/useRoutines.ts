@@ -20,15 +20,30 @@ export const useRoutines = (
 
   // ファイルからの初期データ読み込み用
   const initRoutines = (data: Routine[]) => setRoutines(data);
-  const initDailyProgress = (data: DailyProgress) => {
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    if (data.date === todayStr) {
-      setCompletedDailyIds(data.completedRoutineIds);
-    } else {
-      setCompletedDailyIds([]);
-      writeFile('daily_progress.json', JSON.stringify({ date: todayStr, completedRoutineIds: [] }, null, 2));
-    }
-  };
+  const initDailyProgress = (data: DailyProgress, allRoutines: Routine[]) => {
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+    
+      if (data.date === todayStr) {
+        setCompletedDailyIds(data.completedRoutineIds);
+        return 0; // 今日ならペナルティなし
+      } else {
+        // 【判定ロジック】
+        // 1. 前回保存された日付(data.date)において、本来やるべきだったルーチンを特定
+        const lastLoginDate = new Date(data.date);
+        const activeRoutinesCount = allRoutines.filter(r => 
+          isRoutineActiveToday(r, lastLoginDate) // dateUtils の判定関数を使用
+        ).length;
+    
+        // 2. 未達成数を算出 (本来の数 - 実際に完了した数)
+        const missedCount = Math.max(0, activeRoutinesCount - data.completedRoutineIds.length);
+        
+        setCompletedDailyIds([]);
+        // 日付を更新して保存
+        writeFile('daily_progress.json', JSON.stringify({ date: todayStr, completedRoutineIds: [] }, null, 2));
+        
+        return missedCount; // 未達成数を返して App.tsx でコインを減らす
+      }
+    };
 
   const saveRoutineJSON = async (newRoutineData: Omit<Routine, 'id'>) => {
     const routine: Routine = { ...newRoutineData, id: `r-${Date.now()}` };
