@@ -1,8 +1,9 @@
+// src/utils/dateUtils.ts
 import { format, addDays } from 'date-fns';
 import type { Routine } from '../types';
 
 /**
- * ルーチンが今日活性化すべきか判定する (1機能: 活性判定)
+ * ルーチンが今日活性化すべきか判定する
  */
 export const isRoutineActiveToday = (routine: Routine, today: Date = new Date()): boolean => {
   if (routine.type === 'daily') return true;
@@ -16,7 +17,7 @@ export const isRoutineActiveToday = (routine: Routine, today: Date = new Date())
 };
 
 /**
- * ルーチンのルールに基づき期限タグを生成する (1機能: タグ生成)
+ * ルーチンのルールに基づき期限タグを生成する
  */
 export const calculateRoutineDeadlineTag = (routine: Routine, today: Date = new Date()): string => {
   if (routine.deadlineRule === 'none') return '';
@@ -28,4 +29,11 @@ export const calculateRoutineDeadlineTag = (routine: Routine, today: Date = new 
   
   const targetDate = addDays(today, diff);
   return ` (@${format(targetDate, 'M/d')})`;
+};
+
+/**
+ * 通常の期限タグ (@M/D) を生成する
+ */
+export const generateDeadlineTag = (date: Date): string => {
+  return `(@${format(date, 'M/d')})`;
 };

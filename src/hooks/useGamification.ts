@@ -1,63 +1,97 @@
+// src/hooks/useGamification.ts
 import { useState } from 'react';
-import type { Task, GamificationData } from '../types';
-import { calculateEarnedCoins } from '../logic/taskLogic';
+import type { GamificationData, Task } from '../types';
+
+const defaultGamification: GamificationData = {
+  coins: 0,
+  shopItems: [
+    { id: 'item-1', name: 'ラムネ1個', cost: 50, icon: '🍬' },
+    { id: 'item-2', name: 'ゲーム30分', cost: 300, icon: '🎮' },
+    { id: 'item-3', name: '罪悪感のない昼寝', cost: 500, icon: '🛌' }
+  ]
+};
 
 export const useGamification = (writeFile: (filename: string, content: string) => Promise<void>) => {
-  const [gamification, setGamification] = useState<GamificationData>({
-    coins: 0,
-    shopItems: [
-      { id: 'item-1', name: 'ラムネ1個', cost: 50, icon: '🍬' },
-      { id: 'item-2', name: 'ゲーム30分', cost: 300, icon: '🎮' },
-      { id: 'item-3', name: '罪悪感のない昼寝', cost: 500, icon: '🛌' }
-    ]
-  });
-  const [toast, setToast] = useState<{ message: string; difficulty: number; id: number } | null>(null);
+  const [gamification, setGamification] = useState<GamificationData>(defaultGamification);
   const [isShopDrawerOpen, setIsShopDrawerOpen] = useState(false);
+  const [isShopEditMode, setIsShopEditMode] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  
+  const [editItemData, setEditItemData] = useState({ name: '', cost: 100, icon: '🎁' });
+  const [newItemData, setNewItemData] = useState({ name: '', cost: 100, icon: '🎁' });
 
-  // トースト表示ロジック (1機能：ユーザーフィードバック)
-  const showToast = (message: string, difficulty: number) => {
-    setToast({ message, difficulty, id: Date.now() });
-    setTimeout(() => setToast(null), 3000);
+  // ファイルからの初期データ読み込み用
+  const initGamification = (data: GamificationData) => {
+    setGamification(data);
   };
 
-  // データの永続化を含む更新 (1機能：データ同期)
   const saveGamificationData = async (newData: GamificationData) => {
     setGamification(newData);
     await writeFile('gamification.json', JSON.stringify(newData, null, 2));
   };
 
-  // タスク完了時の報酬処理 (1機能：報酬計算の適用)
-  const handleTaskReward = async (task: Task, isChecking: boolean) => {
-    const earnedCoins = calculateEarnedCoins(task);
-    const newCoins = isChecking 
-      ? gamification.coins + earnedCoins 
-      : Math.max(0, gamification.coins - earnedCoins);
-
-    await saveGamificationData({ ...gamification, coins: newCoins });
-    
-    if (isChecking) {
-      showToast(`+${earnedCoins} 🪙`, task.difficulty);
-    } else {
-      showToast(`-${earnedCoins} 🪙`, 1);
-    }
+  const handleAddShopItem = async () => {
+    if (!newItemData.name.trim()) return;
+    const newItem = {
+      id: `item-${Date.now()}`,
+      name: newItemData.name.trim(),
+      cost: Math.max(1, newItemData.cost),
+      icon: newItemData.icon || '🎁'
+    };
+    await saveGamificationData({ ...gamification, shopItems: [...gamification.shopItems, newItem] });
+    setNewItemData({ name: '', cost: 100, icon: '🎁' });
   };
 
-  // アイテム購入ロジック (1機能：購買処理)
-  const purchaseItem = async (itemId: string) => {
-    const item = gamification.shopItems.find(i => i.id === itemId);
-    if (!item || gamification.coins < item.cost) return false;
+  const handleDeleteShopItem = async (id: string) => {
+    if (!window.confirm("このアイテムを削除してもよろしいですか？")) return;
+    await saveGamificationData({ ...gamification, shopItems: gamification.shopItems.filter(item => item.id !== id) });
+  };
 
-    await saveGamificationData({ ...gamification, coins: gamification.coins - item.cost });
-    return item.name;
+  const handleUpdateShopItem = async (id: string) => {
+    if (!editItemData.name.trim()) return;
+    await saveGamificationData({
+      ...gamification,
+      shopItems: gamification.shopItems.map(item => item.id === id ? { ...item, ...editItemData } : item)
+    });
+    setEditingItemId(null);
+  };
+
+  const startEditing = (item: any) => {
+    setEditingItemId(item.id);
+    setEditItemData({ name: item.name, cost: item.cost, icon: item.icon });
+  };
+
+  // タスク完了時のコイン計算ロジック（純粋関数的アプローチ）
+  const calculateTaskCoins = (task: Task) => {
+    let multiplier = 20;
+    if (task.routineType === 'daily') multiplier = 5;
+    if (task.routineType === 'weekly') multiplier = 10;
+    return task.difficulty * multiplier;
+  };
+
+  // コインの増減アクション
+  const addCoins = async (amount: number) => {
+    await saveGamificationData({ ...gamification, coins: gamification.coins + amount });
+  };
+
+  const removeCoins = async (amount: number) => {
+    await saveGamificationData({ ...gamification, coins: Math.max(0, gamification.coins - amount) });
   };
 
   return {
     gamification,
-    setGamification,
-    toast,
-    isShopDrawerOpen,
-    setIsShopDrawerOpen,
-    handleTaskReward,
-    purchaseItem
+    initGamification,
+    isShopDrawerOpen, setIsShopDrawerOpen,
+    isShopEditMode, setIsShopEditMode,
+    editingItemId, setEditingItemId,
+    editItemData, setEditItemData,
+    newItemData, setNewItemData,
+    handleAddShopItem,
+    handleDeleteShopItem,
+    handleUpdateShopItem,
+    startEditing,
+    calculateTaskCoins,
+    addCoins,
+    removeCoins
   };
 };
