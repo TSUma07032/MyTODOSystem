@@ -42,3 +42,26 @@ export interface DailyProgress {
   date: string; // "2024-03-20"
   completedRoutineIds: string[]; // 完了したルーチンのIDリスト
 }
+
+export type ModuleStatus = 'on' | 'off';
+
+export interface InfrastructureModule {
+  id: string;
+  name: string;
+  level: number;       // 現在のレベル (1〜10)
+  rank: number;        // 転生回数（星の数）
+  status: ModuleStatus;
+  
+  // 基礎性能（レベル1・ランク0の時の値）
+  baseIncome: number;      // 1日あたりのコイン生成量
+  baseMultiplier: number;  // タスク完了時のボーナス倍率 (例: 0.1 なら +10%)
+  baseMaintenance: number; // 1日あたりの維持費
+  
+  // 個性（生成時のレアリティや属性を表現。UIの装飾などに使う）
+  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
+  color: string; // Tailwindのテキストカラークラス等（例: 'text-purple-500'）
+
+  // 動的に変動する性能
+  currentIncomeMultiplier?: number;      // 1.0 〜 2.0 倍
+  currentMaintenanceMultiplier?: number; // 1.0~5.0 倍
+}

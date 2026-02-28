@@ -1,7 +1,7 @@
 // src/hooks/useAppInitialization.ts
 import { useEffect } from 'react';
 import { format } from 'date-fns';
-import type { Routine, DailyProgress, GamificationData } from '../types';
+import type { Routine, DailyProgress, GamificationData, InfrastructureModule } from '../types';
 
 interface InitializationProps {
   mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar';
@@ -11,6 +11,7 @@ interface InitializationProps {
   initDailyProgress: (data: DailyProgress, allRoutines: Routine[]) => number;
   initGamification: (data: GamificationData) => void;
   initRoutines: (data: Routine[]) => void;
+  initInfrastructure: (modules: InfrastructureModule[], debt: number) => void;
   setInput: (text: string) => void;
   setHistoryItems: (items: any[]) => void;
   routines: Routine[]; 
@@ -19,7 +20,7 @@ interface InitializationProps {
 
 export const useAppInitialization = ({
   mode, isReady, readFile, writeFile,
-  initDailyProgress, initGamification, initRoutines,
+  initDailyProgress, initGamification, initRoutines, initInfrastructure,
   setInput, setHistoryItems,
   routines, onPenalty
 }: InitializationProps) => {
@@ -48,6 +49,16 @@ export const useAppInitialization = ({
     const loadData = async () => {
       if ((mode === 'dashboard' || mode === 'calendar') && isReady) {
         let content = await readFile('current_active_todo.md') || "## Today\n- [ ] まだタスクがないよ！\n- [ ] 夜モードで同期して生成しよう";
+
+        try {
+          const infraContent = await readFile('infrastructure.json');
+          if (infraContent) {
+            const parsed = JSON.parse(infraContent);
+            initInfrastructure(parsed.modules || [], parsed.debt || 0);
+          }
+        } catch (e) {
+          console.log("Infrastructure data not found, starting fresh.");
+        }
         
         let gameJson = await readFile('gamification.json');
         if (gameJson) initGamification(JSON.parse(gameJson));

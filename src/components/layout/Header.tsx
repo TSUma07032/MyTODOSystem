@@ -1,6 +1,6 @@
 // src/components/layout/Header.tsx
 import React from 'react';
-import { Coins, Repeat, FolderOpen } from 'lucide-react';
+import { Coins, Repeat, FolderOpen, Server } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   isReady: boolean;
   onOpenShop: () => void;
   onOpenRoutines: () => void;
+  onOpenInfrastructure: () => void;
   onConnectFolder: () => void;
 }
 
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   isReady,
   onOpenShop,
   onOpenRoutines,
+  onOpenInfrastructure,
   onConnectFolder
 }) => {
   // Sync（Night）モードかどうかでベースのスタイルを切り替え
@@ -51,6 +53,16 @@ export const Header: React.FC<HeaderProps> = ({
           <Coins className="w-5 h-5 fill-yellow-500 text-yellow-600" />
           {coins.toLocaleString()}
         </button>
+
+        {/* インフラ管理を開くボタン */}
+        <Button 
+          size="sm" 
+          variant="secondary" 
+          icon={<Server className="w-4 h-4 text-cyan-600" />} 
+          onClick={onOpenInfrastructure}
+        >
+          Core
+        </Button>
 
         {/* ルーチン設定ボタン（作った共通UIの Button コンポーネントを活用！） */}
         <Button 

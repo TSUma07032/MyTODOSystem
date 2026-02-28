@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 
 // Hooks
@@ -22,6 +22,8 @@ import { Toast } from './components/ui/Toast';
 
 // Custom Hooks
 import { useAppInitialization } from './hooks/useAppInitialization';
+import { useInfrastructure } from './hooks/useInfrastructure';
+import { InfrastructureDrawer } from './components/features/infrastructure/InfrastructureDrawer';
 
 // View用の導出ロジックをまとめたカスタムフック
 import { useAppViewData } from './hooks/useAppViewData';
@@ -48,6 +50,9 @@ function App() {
   // ダッシュボード用の新規タスク入力状態
   const [newTaskText, setNewTaskText] = useState("");
 
+  // ドロワーの開閉ステートを追加
+  const [isInfrastructureDrawerOpen, setIsInfrastructureDrawerOpen] = useState(false);
+
   // 2. カスタムフックの初期化
   const { 
     dirHandle, isReady, pickDirectory, verifyPermission, 
@@ -66,6 +71,10 @@ function App() {
     handleAddShopItem, handleDeleteShopItem, handleUpdateShopItem, startEditing,
     calculateTaskCoins, addCoins, removeCoins
   } = useGamification(writeFile);
+
+  const { 
+    modules, debt, initInfrastructure, mineModule, toggleModuleStatus, processSettlement, upgradeModule, resonateModule, repayDebt, sellModule
+  } = useInfrastructure(gamification.coins, addCoins, removeCoins, writeFile);
 
   const {
     routines, initRoutines, completedDailyIds, initDailyProgress,
@@ -93,18 +102,49 @@ function App() {
 
     let earnedCoins = 0;
     let maxDifficulty = 0;
-    
     toggledTasks.forEach(t => {
       earnedCoins += calculateTaskCoins(t);
       if (t.difficulty > maxDifficulty) maxDifficulty = t.difficulty;
     });
 
+    const activeModules = modules.filter(m => m.status === 'on');
+    const totalMultiplier = activeModules.reduce((sum, m) => 
+      sum + (m.baseMultiplier * m.level * (1 + m.rank * 0.2)), 0
+    );
+    
+    // バフ込みの最終獲得予定コイン
+    const finalCoins = Math.floor(earnedCoins * (1 + totalMultiplier));
+
     if (isCurrentlyTodo) {
-      await addCoins(earnedCoins);
-      showToast(`+${earnedCoins} 🪙`, maxDifficulty);
+      // 🚨 借金がある場合の強制天引き処理（差し押さえ）
+      let actualCoinsToAdd = finalCoins;
+      let deductedForDebt = 0;
+
+      if (debt > 0) {
+        // 獲得コインの50%、または借金の残額のどちらか少ない方を天引き
+        deductedForDebt = Math.min(Math.ceil(finalCoins * 0.5), debt);
+        actualCoinsToAdd = finalCoins - deductedForDebt;
+        
+        // 借金を減らす
+        await repayDebt(deductedForDebt);
+      }
+
+      // 残りのコインを手持ちに加算
+      if (actualCoinsToAdd > 0) {
+        await addCoins(actualCoinsToAdd);
+      }
+
+      // トースト表示をリッチに
+      let toastMsg = `+${actualCoinsToAdd} 🪙`;
+      if (totalMultiplier > 0) toastMsg += ` (Boost: +${Math.floor(totalMultiplier * 100)}%)`;
+      if (deductedForDebt > 0) toastMsg += `\n💸 借金返済: -${deductedForDebt} 🪙`;
+      
+      showToast(toastMsg, maxDifficulty);
+      
     } else {
-      await removeCoins(earnedCoins);
-      showToast(`-${earnedCoins} 🪙`, 1);
+      // タスクを未完了に戻した場合（ペナルティ）
+      await removeCoins(finalCoins);
+      showToast(`-${finalCoins} 🪙`, 1);
     }
   };
 
@@ -160,8 +200,31 @@ function App() {
     mode, isReady, readFile, writeFile,
     initDailyProgress, initGamification, initRoutines,
     setInput, setHistoryItems,
-    routines, onPenalty: handlePenalty
+    routines, onPenalty: handlePenalty,
+    initInfrastructure
   });
+
+  useEffect(() => { //後で隔離
+    const runSettlement = async () => {
+      // isReady になり、モジュールデータが存在する場合のみ実行
+      if (isReady && modules.length > 0) {
+        const result = await processSettlement(gamification.coins);
+        
+        if (result) {
+          // 清算が発生した場合、結果をトーストで通知
+          const sign = result.netDifference > 0 ? "+" : "";
+          const msg = `[${result.daysPassed}日分の清算] 収益:${Math.floor(result.totalIncome)} 維持費:-${Math.floor(result.totalMaintenance)} (収支: ${sign}${result.netDifference} 🪙)`;
+          
+          showToast(msg, result.netDifference < 0 ? 5 : 1);
+          
+          if (result.newDebt > debt) {
+            setTimeout(() => showToast(`⚠️ 資金ショート！借金が ${result.newDebt.toLocaleString()} 🪙 に膨れ上がりました！`, 5), 3500);
+          }
+        }
+      }
+    };
+    runSettlement();
+  }, [isReady, modules.length]); // 初回ロード後に発火
 
   // 5. 導出ステート (useMemo群)
   const { groupedHistory, calendarDays, themeConfig } = useAppViewData({
@@ -185,6 +248,7 @@ function App() {
         isReady={isReady} 
         onOpenShop={() => setIsShopDrawerOpen(true)} 
         onOpenRoutines={() => setIsRoutineDrawerOpen(true)} 
+        onOpenInfrastructure={() => setIsInfrastructureDrawerOpen(true)}
         onConnectFolder={!dirHandle ? pickDirectory : verifyPermission} 
       />
 
@@ -292,6 +356,42 @@ function App() {
         setDrawerGenerateOn={setDrawerGenerateOn} drawerDeadline={drawerDeadline} 
         setDrawerDeadline={setDrawerDeadline} handleAddRoutineFromDrawer={handleAddRoutineFromDrawer} 
         deleteRoutineJSON={deleteRoutineJSON} 
+      />
+
+      <InfrastructureDrawer 
+        isOpen={isInfrastructureDrawerOpen}
+        onClose={() => setIsInfrastructureDrawerOpen(false)}
+        modules={modules}
+        debt={debt}
+        coins={gamification.coins}
+        onMine={async () => {
+          const newMod = await mineModule();
+          if (newMod) {
+             // マイニング成功時にトースト通知を出すと気持ちいいです
+             showToast(`[${newMod.rarity}] ${newMod.name} を発掘しました！`, newMod.rarity === 'Legendary' ? 5 : 2);
+          }
+        }}
+        onToggleStatus={toggleModuleStatus}
+        // レベルアップ処理を繋ぐ
+        onUpgrade={async (id, currentCoins) => {
+          const success = await upgradeModule(id, currentCoins);
+          if (success) showToast("モジュールをアップグレードしました！", 2);
+          return success;
+        }}
+        onResonate={async (id) => {
+          const childName = await resonateModule(id);
+          if (childName) {
+            showToast(`共鳴成功！新たなモジュール「${childName}」が誕生しました！`, 5);
+          }
+          return childName;
+        }}
+        onSell={async (id) => {
+          const price = await sellModule(id);
+          if (price !== false) {
+            showToast(`不要なモジュールを ${price} 🪙 でスクラップ業者に売却しました。`, 2);
+          }
+          return price;
+        }}
       />
     </div>
   );
