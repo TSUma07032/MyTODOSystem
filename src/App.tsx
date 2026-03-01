@@ -28,9 +28,6 @@ import { InfrastructureDrawer } from './components/features/infrastructure/Infra
 // View用の導出ロジックをまとめたカスタムフック
 import { useAppViewData } from './hooks/useAppViewData';
 
-// Icons
-import { ArrowRight, Sparkles, Copy, CheckCircle } from 'lucide-react';
-
 function App() {
   // 1. アプリケーションのグローバルな状態
   const [mode, setMode] = useState<'dashboard' | 'daily' | 'sync' | 'history' | 'calendar'>('dashboard');
@@ -245,7 +242,7 @@ function App() {
 
   // 6. メインレンダリング
   return (
-    <div className={`h-screen flex flex-col font-sans transition-all duration-700 animate-gradient-flow ${themeConfig.bg}`}>
+    <div className={`h-screen flex font-sans transition-all duration-700 animate-gradient-flow ${themeConfig.bg}`}>
       
       {/* トースト通知 */}
       {toast && <Toast message={toast.message} difficulty={toast.difficulty} />}
@@ -253,6 +250,7 @@ function App() {
       {/* トップヘッダー */}
       <Header 
         mode={mode} 
+        setMode={setMode} 
         themeIcon={themeConfig.icon} 
         themeAccent={themeConfig.accent} 
         coins={gamification.coins} 
@@ -261,10 +259,14 @@ function App() {
         onOpenRoutines={() => setIsRoutineDrawerOpen(true)} 
         onOpenInfrastructure={() => setIsInfrastructureDrawerOpen(true)}
         onConnectFolder={!dirHandle ? pickDirectory : verifyPermission} 
+        onCopy={handleCopy} 
+        copied={copied} 
+        onSync={handleSyncAndSave} 
+        isSyncing={isSyncing}
       />
 
       {/* メインコンテンツエリア */}
-      <div className="flex-1 flex overflow-hidden relative animate-fadeIn">
+      <div className="flex-1 flex flex-col overflow-hidden relative animate-fadeIn">
         
         {/* History モード */}
         {mode === 'history' && (
@@ -290,27 +292,11 @@ function App() {
             </div>
 
             {/* 右側（メイン）：タスクリスト表示エリア */}
-            <div className={`flex flex-col transition-all duration-700 ${mode === 'dashboard' || mode === 'daily' ? 'w-full max-w-3xl mx-auto' : 'w-1/2 bg-black/10 backdrop-blur-lg'}`}>
-              
-              {/* モード切替タブ・アクションボタン */}
-              <div className={`p-4 flex justify-between items-center sticky top-0 z-10 backdrop-blur-xl border-b transition-colors duration-700 ${mode === 'sync' ? "bg-black/20 border-white/10 text-white" : "bg-white/60 border-white/40 text-slate-800"}`}>
-                 <div className="flex bg-black/5 p-1 rounded-full backdrop-blur-sm relative shadow-inner">
-                    <button onClick={() => setMode('dashboard')} className={`relative z-10 px-4 py-2 text-xs font-bold rounded-full transition-colors ${mode === 'dashboard' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}>Mission</button>
-                    <button onClick={() => setMode('daily')} className={`relative z-10 px-4 py-2 text-xs font-bold rounded-full transition-colors ${mode === 'daily' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}>Daily</button>
-                    <button onClick={() => setMode('calendar')} className={`relative z-10 px-4 py-2 text-xs font-bold rounded-full transition-colors ${mode === 'calendar' ? 'bg-white shadow text-emerald-600' : 'text-gray-500'}`}>Calendar</button>
-                    <button onClick={() => setMode('sync')} className={`relative z-10 px-4 py-2 text-xs font-bold rounded-full transition-colors ${mode === 'sync' ? 'bg-white shadow text-purple-600' : 'text-gray-500'}`}>Night Sync</button>
-                 </div>
-                 
-                 {mode === 'sync' ? (
-                    <button onClick={handleSyncAndSave} disabled={isSyncing} className="flex items-center gap-3 px-8 py-3 rounded-full shadow-lg font-bold text-white bg-gradient-to-r from-slate-800 to-purple-800 transition-all active:scale-95">
-                      {isSyncing ? <Sparkles className="w-5 h-5 animate-spin" /> : <ArrowRight className="w-5 h-5" />} Finish Day
-                    </button>
-                 ) : (
-                    <button onClick={handleCopy} className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg font-bold text-white transition-all active:scale-95 ${copied ? "bg-green-500" : "bg-gradient-to-r from-orange-400 to-pink-500"}`}>
-                      {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />} {copied ? "Copied!" : "Copy Mission"}
-                    </button>
-                 )}
-              </div>
+            <div className={`flex flex-col transition-all duration-700 ${
+              mode === 'sync' ? 'w-1/2 bg-black/10 backdrop-blur-lg' : 
+              mode === 'calendar' ? 'w-full max-w-[1400px] mx-auto px-4' : /* 📅 カレンダーは超ワイドに解放！ */
+              'w-full max-w-5xl mx-auto px-4' /* 📝 Dashboard/Dailyも少し広く（768px → 1024px） */
+            }`}>
 
               {/* 各モードに応じたビューのレンダリング */}
               <div className={`flex-1 overflow-y-auto p-6 space-y-2 ${mode === 'sync' && "text-white"}`}>

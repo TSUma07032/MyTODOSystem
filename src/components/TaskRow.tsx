@@ -166,7 +166,7 @@ export const TaskRow: React.FC<Props> = ({
                 </button>
               )}
               {onAddSubTask && !isAddingSub && task.status !== 'done' && (
-                <button onClick={() => setIsAddingSub(true)} className="p-1.5 rounded-md hover:bg-gray-200 text-gray-400 hover:text-orange-500 transition-colors" title="Add sub-task">
+                <button onClick={() => setIsAddingSub(true)} className="p-1.5 rounded-md placeholder-slate-400 hover:bg-gray-200 text-gray-400 hover:text-orange-500 transition-colors" title="Add sub-task">
                   <CornerDownRight className="w-4 h-4" />
                 </button>
               )}
@@ -189,9 +189,25 @@ export const TaskRow: React.FC<Props> = ({
         {isAddingSub && (
           <div className="flex items-center gap-2 py-2 pr-4 animate-fadeIn mt-2 w-full" style={{ paddingLeft: `${(task.indent + 1) * 1.5 + 1.5}rem` }}>
             <CornerDownRight className="w-4 h-4 text-gray-300" />
-            <input autoFocus type="text" value={subText} onChange={(e) => setSubText(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') handleSubSubmit(); if (e.key === 'Escape') setIsAddingSub(false); }} placeholder="What needs to be done?" className="flex-1 bg-transparent border-b border-gray-300 focus:border-orange-400 outline-none text-sm py-1" />
-            <button onClick={handleSubSubmit} className="p-1 bg-orange-500 text-white rounded hover:bg-orange-600"><Plus className="w-4 h-4" /></button>
-            <button onClick={() => setIsAddingSub(false)} className="text-xs text-gray-400 hover:text-gray-600 px-2">Cancel</button>
+            <input 
+              autoFocus 
+              type="text" 
+              value={subText} 
+              onChange={(e) => setSubText(e.target.value)} 
+              onKeyDown={(e) => { 
+                if (e.nativeEvent.isComposing) return; 
+                if (e.key === 'Enter') handleSubSubmit(); 
+                if (e.key === 'Escape') setIsAddingSub(false); 
+              }} 
+              placeholder="What needs to be done?" 
+              className="flex-1 bg-transparent text-slate-700 border-b border-gray-300 placeholder-slate-400 focus:border-orange-400 outline-none text-sm py-1" 
+            />
+            <button onClick={handleSubSubmit} className="p-1 bg-orange-500 text-white rounded hover:bg-orange-600">
+              <Plus className="w-4 h-4" />
+            </button>
+            <button onClick={() => setIsAddingSub(false)} className="text-xs text-gray-400 hover:text-gray-600 px-2">
+              Cancel
+            </button>
           </div>
         )}
       </div>
