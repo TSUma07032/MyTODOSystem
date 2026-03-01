@@ -103,7 +103,7 @@ function App() {
     let earnedCoins = 0;
     let maxDifficulty = 0;
     toggledTasks.forEach(t => {
-      earnedCoins += calculateTaskCoins(t);
+      earnedCoins += calculateTaskCoins(t); // taskLogicからの戻り値（マイナスも有り得る）
       if (t.difficulty > maxDifficulty) maxDifficulty = t.difficulty;
     });
 
@@ -112,39 +112,50 @@ function App() {
       sum + (m.baseMultiplier * m.level * (1 + m.rank * 0.2)), 0
     );
     
-    // バフ込みの最終獲得予定コイン
-    const finalCoins = Math.floor(earnedCoins * (1 + totalMultiplier));
+    // 🛡️ バフ込みの最終獲得予定コイン（ペナルティのマイナス値にはバフを掛けない安全設計！）
+    const finalCoins = earnedCoins >= 0 
+      ? Math.floor(earnedCoins * (1 + totalMultiplier)) 
+      : earnedCoins; 
 
     if (isCurrentlyTodo) {
-      // 🚨 借金がある場合の強制天引き処理（差し押さえ）
-      let actualCoinsToAdd = finalCoins;
-      let deductedForDebt = 0;
+      if (finalCoins >= 0) {
+        // 🟢 通常クリア or 早期クリアボーナスの処理
+        let actualCoinsToAdd = finalCoins;
+        let deductedForDebt = 0;
 
-      if (debt > 0) {
-        // 獲得コインの50%、または借金の残額のどちらか少ない方を天引き
-        deductedForDebt = Math.min(Math.ceil(finalCoins * 0.5), debt);
-        actualCoinsToAdd = finalCoins - deductedForDebt;
+        if (debt > 0) {
+          deductedForDebt = Math.min(Math.ceil(finalCoins * 0.5), debt);
+          actualCoinsToAdd = finalCoins - deductedForDebt;
+          await repayDebt(deductedForDebt);
+        }
+
+        if (actualCoinsToAdd > 0) {
+          await addCoins(actualCoinsToAdd);
+        }
+
+        let toastMsg = `+${actualCoinsToAdd} 🪙`;
+        if (totalMultiplier > 0) toastMsg += ` (Boost: +${Math.floor(totalMultiplier * 100)}%)`;
+        if (deductedForDebt > 0) toastMsg += `\n💸 借金返済: -${deductedForDebt} 🪙`;
         
-        // 借金を減らす
-        await repayDebt(deductedForDebt);
+        showToast(toastMsg, maxDifficulty);
+      } else {
+        // 🔴 期限超過ペナルティの処理 (finalCoins がマイナスの場合)
+        const penaltyAmount = Math.abs(finalCoins);
+        await removeCoins(penaltyAmount);
+        showToast(`期限超過ペナルティ... -${penaltyAmount} 🪙`, 5); // 赤色(難易度5)のトーストで警告
       }
-
-      // 残りのコインを手持ちに加算
-      if (actualCoinsToAdd > 0) {
-        await addCoins(actualCoinsToAdd);
-      }
-
-      // トースト表示をリッチに
-      let toastMsg = `+${actualCoinsToAdd} 🪙`;
-      if (totalMultiplier > 0) toastMsg += ` (Boost: +${Math.floor(totalMultiplier * 100)}%)`;
-      if (deductedForDebt > 0) toastMsg += `\n💸 借金返済: -${deductedForDebt} 🪙`;
-      
-      showToast(toastMsg, maxDifficulty);
       
     } else {
-      // タスクを未完了に戻した場合（ペナルティ）
-      await removeCoins(finalCoins);
-      showToast(`-${finalCoins} 🪙`, 1);
+      // 🔙 タスクを未完了に戻した場合（誤タップ対応）
+      if (finalCoins >= 0) {
+        await removeCoins(finalCoins);
+        showToast(`-${finalCoins} 🪙`, 1);
+      } else {
+        // ペナルティだったタスクを戻した場合は、没収分を返還する親切設計
+        const returnAmount = Math.abs(finalCoins);
+        await addCoins(returnAmount);
+        showToast(`ペナルティ返還 +${returnAmount} 🪙`, 1);
+      }
     }
   };
 
