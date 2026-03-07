@@ -1,29 +1,17 @@
-import type { Task } from '../types';
+import { type Task } from '../types';
 
-/**
- * タスク完了時に獲得できるコインを計算する (1コード1機能: コイン計算)
- */
-export const calculateEarnedCoins = (task: Task): number => {
-  let multiplier = 20;
-  if (task.routineType === 'daily') multiplier = 5;
-  if (task.routineType === 'weekly') multiplier = 10;
-  return (task.difficulty || 2) * multiplier;
+// 再帰的に親を辿り、インデントの深さ（レベル）を計算する関数
+export const getTaskIndent = (taskId: string, tasks: Task[]): number => {
+  const task = tasks.find(t => t.id === taskId);
+  // 親がいない（null）か、タスクが見つからなければインデント0
+  if (!task || !task.parentId) return 0;
+  
+  // 親がいる場合は「親の深さ + 1」を返す！
+  return 1 + getTaskIndent(task.parentId, tasks);
 };
 
-/**
- * 難易度を循環させる (1 -> 2 -> 3 -> 4 -> 5 -> 1)
- */
-export const getNextDifficulty = (currentDiff: number): number => {
-  return currentDiff >= 5 ? 1 : currentDiff + 1;
-};
-
-/**
- * Markdownの行から特定のタグを置換または追加するヘルパー
- */
-export const updateLineWithTag = (line: string, regex: RegExp, newTag: string): string => {
-  const trimmedLine = line.trimEnd();
-  if (regex.test(trimmedLine)) {
-    return trimmedLine.replace(regex, newTag);
-  }
-  return `${trimmedLine} ${newTag}`;
+// 特定のタスクの「すべての子孫タスクID」を取得する関数（移動や削除で大活躍します）
+export const getDescendantIds = (parentId: string, tasks: Task[]): string[] => {
+  const children = tasks.filter(t => t.parentId === parentId).map(t => t.id);
+  return [...children, ...children.flatMap(childId => getDescendantIds(childId, tasks))];
 };

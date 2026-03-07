@@ -3,6 +3,7 @@ import React from 'react';
 import { Plus } from 'lucide-react';
 import { TaskRow } from '../TaskRow';
 import type { Task } from '../../types';
+import { getTaskIndent } from '../../logic/taskLogic';
 
 interface DashboardViewProps {
   tasks: Task[];
@@ -50,6 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <TaskRow 
             key={task.id} 
             task={task} 
+            indent = {getTaskIndent(task.id, tasks)}
             isSyncing={isSyncing} 
             isNightMode={isNightMode}
             onToggle={onToggleTask} 

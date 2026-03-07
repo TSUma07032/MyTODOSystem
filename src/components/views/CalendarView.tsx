@@ -4,6 +4,7 @@ import { format, subMonths, addMonths, isToday, isBefore, startOfDay } from 'dat
 import { ChevronLeft, ChevronRight, X, Coffee, CheckCircle, AlertCircle } from 'lucide-react';
 import { IconButton } from '../ui/IconButton';
 import type { Task } from '../../types';
+import { getTaskIndent } from '../../logic/taskLogic';
 
 export interface CalendarDayItem {
   date: Date;
@@ -73,7 +74,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
 
         {/* カレンダーグリッド本体 */}
-        {/* カレンダーグリッド本体 */}
         <div className="flex-1 grid grid-cols-7 gap-2 auto-rows-fr overflow-y-auto pb-4 pr-1 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-transparent"> 
           {calendarDays.map((dayItem, idx) => {
             const isSelected = selectedDay?.getTime() === dayItem.date.getTime();
@@ -86,7 +86,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             const hasOverdue = isPast && pendingCount > 0;
 
             // 🌟 チラ見せ用の親タスク（indentが0のもの）を優先的に抽出
-            const previewTasks = dayItem.tasks.filter(t => t.indent === 0).slice(0, 2);
+            const previewTasks = dayItem.tasks.filter(t => t.parentId === null).slice(0, 2);
             // もし親タスクが無い（子タスクだけが期限設定されている等）場合は、そのまま先頭2つを取る
             const displayTasks = previewTasks.length > 0 ? previewTasks : dayItem.tasks.slice(0, 2);
 
@@ -191,7 +191,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <div 
                     key={task.id} 
                     className={`group relative p-3 rounded-2xl border transition-all hover:shadow-md ${isDone ? "bg-slate-50 border-transparent opacity-70" : "bg-white border-emerald-50 shadow-sm"}`} 
-                    style={{ marginLeft: `${task.indent * 12}px` }}
+                    style={{ marginLeft: `${getTaskIndent(task.id, selectedDayTasks) * 20}px` }}
                   >
                     <div className="flex items-start gap-3">
                       <button 

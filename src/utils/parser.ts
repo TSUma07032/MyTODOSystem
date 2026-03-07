@@ -17,9 +17,12 @@ export const parseMarkdown = (markdown: string): ParseResult => {
     const taskMatch = line.match(/^(\s*)-\s\[([ xX])\]\s+(.+)$/);
     
     if (taskMatch) {
-      const indent = Math.floor(taskMatch[1].length / 2);
+      // 🚀 修正: タブ文字(\t)をスペース4つ分として換算し、純粋な「空白の長さ」を算出！
+      // 2で割るのをやめ、この物理的な長さをそのまま migrator に渡します。
+      const rawIndentWidth = taskMatch[1].replace(/\t/g, '    ').length;
+      
       const status = taskMatch[2].trim() ? 'done' : 'todo';
-      let text = taskMatch[3]; // ここには「タスク名 + 各種タグ」が入る
+      let text = taskMatch[3];
 
       // 1. ルーチンの隠しタグの抽出
       const routineRegex = /\((daily|weekly):([-\w]+)\)/;
@@ -58,7 +61,7 @@ export const parseMarkdown = (markdown: string): ParseResult => {
         id: `task-line-${index}`, // 行番号固定ID（DOM破壊防止）
         text,
         status,
-        indent,
+        indent: rawIndentWidth, // ★物理的なインデント幅をそのまま保存
         lineNumber: index + 1,
         originalRaw: line,
         estimate,

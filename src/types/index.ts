@@ -1,3 +1,6 @@
+/*
+// 以前のタスク構造体は、Markdownの行をそのまま表現するためのものでしたが、
+// 挙動が不安定になってきたため破棄しました。
 export interface Task {
   id: string;
   text: string;
@@ -12,6 +15,7 @@ export interface Task {
   routineId?: string;
   difficulty: number; // ★追加：難易度(星)
 }
+*/
 
 export interface ParseResult {
   tasks: Task[];
@@ -64,4 +68,23 @@ export interface InfrastructureModule {
   // 動的に変動する性能
   currentIncomeMultiplier?: number;      // 1.0 〜 2.0 倍
   currentMaintenanceMultiplier?: number; // 1.0~5.0 倍
+}
+
+// json用のタスク構造体（木構造を表現）
+export interface Task {
+  id: string;
+  text: string;
+  status: 'todo' | 'done';
+  
+  // 木構造
+  parentId: string | null; // 親を持たないルートタスクは null
+  order: number;           // 表示順（ドラッグ＆ドロップで入れ替える用）
+  
+  // --- 以下のビジネスロジック・メタデータはそのまま維持 ---
+  estimate?: string;
+  deadline?: string;
+  section?: string;
+  routineType?: 'daily' | 'weekly';
+  routineId?: string;
+  difficulty: number;
 }

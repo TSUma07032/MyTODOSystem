@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 
 interface Props {
   task: Task;
+  indent: number;
   isSyncing?: boolean;
   onUpdateDeadline?: (id: string, date: string) => void;
   onToggle?: (id: string) => void;
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export const TaskRow: React.FC<Props> = ({ 
-  task, isSyncing = false, onUpdateDeadline, onToggle, isNightMode = false, onAddSubTask, onUpdateText, onDeleteTask, onMoveTask, onPromoteToRoutine, onChangeDifficulty
+  task, indent, isSyncing = false, onUpdateDeadline, onToggle, isNightMode = false, onAddSubTask, onUpdateText, onDeleteTask, onMoveTask, onPromoteToRoutine, onChangeDifficulty
 }) => {
   const shouldVanish = isSyncing && task.status === 'done';
   const [isAddingSub, setIsAddingSub] = useState(false);
@@ -66,7 +67,7 @@ export const TaskRow: React.FC<Props> = ({
           task.status === 'done' && !isSyncing && "opacity-50 grayscale",
           shouldVanish && "animate-vanish z-10"
         )}
-        style={{ paddingLeft: `${task.indent * 1.5 + 0.2}rem` }}
+        style={{ paddingLeft: `${indent * 1.5 + 0.2}rem` }}
       >
         {/* 左側：ドラッグハンドル */}
         <div className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-30 hover:!opacity-100 transition-opacity mr-1 mt-0.5">
@@ -187,7 +188,7 @@ export const TaskRow: React.FC<Props> = ({
         </div>
 
         {isAddingSub && (
-          <div className="flex items-center gap-2 py-2 pr-4 animate-fadeIn mt-2 w-full" style={{ paddingLeft: `${(task.indent + 1) * 1.5 + 1.5}rem` }}>
+          <div className="flex items-center gap-2 py-2 pr-4 animate-fadeIn mt-2 w-full" style={{ paddingLeft: `${(indent + 1) * 1.5 + 1.5}rem` }}>
             <CornerDownRight className="w-4 h-4 text-gray-300" />
             <input 
               autoFocus 

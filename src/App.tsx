@@ -28,6 +28,11 @@ import { InfrastructureDrawer } from './components/features/infrastructure/Infra
 // View用の導出ロジックをまとめたカスタムフック
 import { useAppViewData } from './hooks/useAppViewData';
 
+// utills
+import { tasksToMarkdown } from './utils/markdownSync';
+import { parseMarkdown } from './utils/parser';
+import { migrateMarkdownToJson } from './utils/migrator';
+
 function App() {
   // 1. アプリケーションのグローバルな状態
   const [mode, setMode] = useState<'dashboard' | 'daily' | 'sync' | 'history' | 'calendar'>('dashboard');
@@ -57,9 +62,10 @@ function App() {
   } = useFileSystem();
 
   const {
-    input, setInput, tasks, toggleTaskStatus, changeDifficulty,
-    updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateInputAndSave
-  } = useTasks("", writeFile);
+    tasks, setTasks, 
+    toggleTaskStatus, changeDifficulty,
+    updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateTasksAndSave
+  } = useTasks(writeFile);
 
   const {
     gamification, initGamification,
@@ -80,10 +86,8 @@ function App() {
     drawerGenerateOn, setDrawerGenerateOn, drawerDeadline, setDrawerDeadline,
     saveRoutineJSON, deleteRoutineJSON, handleAddRoutineFromDrawer, toggleDailyProgress
   } = useRoutines(writeFile, async (newLine) => {
-    // ルーチンが活性化した際にタスクリストへ追記するコールバック
-    const activeContent = (await readFile('current_active_todo.md')) || "";
-    const nextContent = activeContent + (activeContent.endsWith('\n') ? '' : '\n') + newLine;
-    await updateInputAndSave(nextContent);
+    // ⚠️ ルーチンのテキスト追加処理はいったん無効化します（後でJSON用の追加ロジックにします）
+    console.log("Routine triggered:", newLine);
   });
 
   // 3. ユーティリティ・アクション関数
@@ -171,27 +175,61 @@ function App() {
     if (!dirHandle) { await pickDirectory(); return; }
     if (!isReady && !(await verifyPermission())) return;
     
+    setIsSyncing(true);
+    await new Promise(resolve => setTimeout(resolve, 800)); // 演出
+    
     const now = new Date();
-    const year = format(now, 'yyyy');
+    const year = format(now, 'yyyy'); // 👈 ここで format 使う！
     const month = format(now, 'MM');
     const timestamp = format(now, 'yyyy-MM-dd_HH-mm-ss');
-    const filename = `${timestamp}.md`;
+    const filename = `${timestamp}.json`; // 👈 MDではなくJSONとして履歴保存
+    
     const doneTasks = tasks.filter(t => t.status === 'done');
     
-    await appendToHistoryIndex(doneTasks, filename, [year, month]);
-    await saveDeepFile([year, month], filename, input);
-    setIsSyncing(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // 終わったタスクの履歴保存（深いフォルダへの保存）を復活！
+    if (doneTasks.length > 0) {
+      await appendToHistoryIndex(doneTasks, filename, [year, month]);
+      await saveDeepFile([year, month], filename, JSON.stringify(doneTasks, null, 2));
+    }
     
-    const nextInput = tasks.filter(t => t.status !== 'done' && t.routineType !== 'daily').map(t => t.originalRaw).join('\n');
-    await updateInputAndSave(nextInput);
+    // 終わったタスクとデイリールーチンを現在のリストから消し去る
+    const newTasks = tasks.filter(t => t.status !== 'done' && t.routineType !== 'daily');
+    
+    await updateTasksAndSave(newTasks); // 旧 updateInputAndSave に該当
     setIsSyncing(false);
   };
 
   const handleCopy = async () => { 
-    await navigator.clipboard.writeText(input); 
+    // JSON配列をMarkdown文字列に変換してコピー！
+    const mdText = tasksToMarkdown(tasks);
+    await navigator.clipboard.writeText(mdText); 
     setCopied(true); 
     setTimeout(() => setCopied(false), 2000); 
+  };
+
+  // 1. Appコンポーネント内のState宣言部に追加
+  const [rawMarkdown, setRawMarkdown] = useState("");
+
+  // 2. タスクが外部から変わった時や、Syncモードを開いた時にMarkdownテキストを同期
+  useEffect(() => {
+    setRawMarkdown(tasksToMarkdown(tasks));
+  }, [tasks]);
+
+  // 3. テキストエリアからフォーカスが外れた時に、JSONへ変換して保存する処理
+  const handleMarkdownApply = async () => {
+    // 変更がない場合はムダな処理をしない（エンジニアのこだわり！）
+    if (rawMarkdown === tasksToMarkdown(tasks)) return;
+
+    try {
+      const { tasks: parsed } = parseMarkdown(rawMarkdown);
+      const newTasks = migrateMarkdownToJson(parsed as any);
+      
+      // useTasksから受け取っている updateTasksAndSave を使って保存
+      await updateTasksAndSave(newTasks); 
+      showToast("MarkdownからJSONへ同期しました！", 2);
+    } catch (e) {
+      showToast("Markdownのパースに失敗しました", 5);
+    }
   };
 
   const handlePenalty = async (missedCount: number) => {
@@ -206,10 +244,9 @@ function App() {
   // 4. 初期データの読み込み (useEffect群)
   useAppInitialization({
     mode, isReady, readFile, writeFile,
-    initDailyProgress, initGamification, initRoutines,
-    setInput, setHistoryItems,
-    routines, onPenalty: handlePenalty,
-    initInfrastructure
+    initDailyProgress, initGamification, initRoutines, initInfrastructure,
+    setTasks, setHistoryItems, 
+    routines, onPenalty: handlePenalty
   });
 
   useEffect(() => { //後で隔離
@@ -288,7 +325,13 @@ function App() {
             
             {/* 左側：生テキストエディタ（Syncモード時のみ表示） */}
             <div className={`w-1/2 flex flex-col border-r transition-all duration-500 ${mode === 'sync' ? 'flex bg-white/80 backdrop-blur-xl border-white/20' : 'hidden'}`}>
-              <textarea className="flex-1 w-full p-8 resize-none font-mono text-sm outline-none bg-transparent text-slate-700" value={input} onChange={(e) => setInput(e.target.value)} />
+              <textarea 
+                className="flex-1 w-full p-8 resize-none font-mono text-sm outline-none bg-transparent text-slate-700 placeholder-slate-400" 
+                value={rawMarkdown} 
+                onChange={(e) => setRawMarkdown(e.target.value)}
+                onBlur={handleMarkdownApply}  /* 👈 ここがキモ！入力が終わって外をクリックしたら発動 */
+                placeholder="- [ ] Notionからペースト..." 
+              />
             </div>
 
             {/* 右側（メイン）：タスクリスト表示エリア */}
