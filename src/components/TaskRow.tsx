@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { type Task } from '../types';
-import { CheckCircle2, Circle, CalendarClock, Calendar, CornerDownRight, Plus, Trash2, GripVertical, Repeat, Star } from 'lucide-react';
+import { CheckCircle2, Circle, CalendarClock, Calendar, CornerDownRight, Plus, Trash2, GripVertical, Repeat, Star, ChevronRight, ChevronDown,  Check, ListPlus } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface Props {
@@ -10,16 +10,21 @@ interface Props {
   onUpdateDeadline?: (id: string, date: string) => void;
   onToggle?: (id: string) => void;
   isNightMode?: boolean;
+  hasChildren?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
   onAddSubTask?: (parentId: string, text: string) => void;
   onUpdateText?: (id: string, text: string) => void;
   onDeleteTask?: (id: string) => void;
   onMoveTask?: (dragId: string, dropId: string) => void;
   onPromoteToRoutine?: (text: string) => void;
   onChangeDifficulty?: (id: string, currentDiff: number) => void;
+  pomodoro?: any;
+  onAddToQueue?: (id: string) => void;
 }
 
 export const TaskRow: React.FC<Props> = ({ 
-  task, indent, isSyncing = false, onUpdateDeadline, onToggle, isNightMode = false, onAddSubTask, onUpdateText, onDeleteTask, onMoveTask, onPromoteToRoutine, onChangeDifficulty
+  task, indent, isSyncing = false, onUpdateDeadline, onToggle, isNightMode = false, onAddSubTask, onUpdateText, onDeleteTask, onMoveTask, onPromoteToRoutine, onChangeDifficulty, hasChildren = false, isExpanded = false, onToggleExpand,pomodoro, onAddToQueue
 }) => {
   const shouldVanish = isSyncing && task.status === 'done';
   const [isAddingSub, setIsAddingSub] = useState(false);
@@ -74,6 +79,22 @@ export const TaskRow: React.FC<Props> = ({
           <GripVertical className="w-4 h-4" />
         </div>
 
+        {/* ========== 追加: 展開/折りたたみトグルボタン ========== */}
+        <div className="flex items-center justify-center w-5 mr-1 mt-0.5 shrink-0">
+          {hasChildren && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // テキスト編集などが発火しないようにブロック
+                if (onToggleExpand) onToggleExpand();
+              }}
+              className="p-0.5 rounded-md hover:bg-gray-200 text-gray-500 transition-colors"
+            >
+              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+        {/* ======================================================== */}
+
         {/* 左側：チェックボックス */}
         <button onClick={() => onToggle && onToggle(task.id)} disabled={isSyncing} className="mr-3 mt-0.5 transition-colors group-hover:scale-110 active:scale-95 disabled:cursor-not-allowed shrink-0">
           {task.status === 'done' ? (
@@ -115,6 +136,13 @@ export const TaskRow: React.FC<Props> = ({
             
             {/* メタデータバッジ群 */}
             <div className="flex items-center gap-1.5 flex-wrap justify-end mt-0.5">
+              
+              {/* 🌟 追加点1: 累計作業時間バッジ (ここに追加) 🌟 */}
+              {task.totalWorkTime && task.totalWorkTime > 0 ? (
+                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-orange-50 text-orange-600 border border-orange-200">
+                  ⏱ {task.totalWorkTime}m
+                </span>
+              ) : null}
               {/* ルーチンバッジ */}
               {isRoutine && (
                 <span className="flex items-center text-[10px] font-bold text-indigo-500 bg-indigo-100/70 px-1.5 py-0.5 rounded-md shadow-sm border border-indigo-200" title="Routine Task">
@@ -161,6 +189,31 @@ export const TaskRow: React.FC<Props> = ({
 
             {/* ホバーアクション群 */}
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-white/50 backdrop-blur-sm rounded-lg px-1">
+
+            {/* 🌟 キュー追加ボタン🌟 */}
+              {pomodoro && onAddToQueue && pomodoro.mode === 'idle' && task.status !== 'done' && (
+                <button 
+                  onClick={() => onAddToQueue(task.id)} 
+                  className="p-1.5 rounded-md text-blue-400 hover:bg-blue-100 hover:text-blue-600 transition-colors" 
+                  title="Focus Queueに追加"
+                >
+                  <ListPlus className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* 🌟 追加点3: 早期完了ボタン (集中モード中かつ、このタスクが対象のときのみ表示) 🌟 */}
+              {pomodoro && pomodoro.mode === 'work' && pomodoro.taskId === task.id && (
+                <button 
+                  onClick={() => {
+                    if (onToggle) onToggle(task.id);
+                    pomodoro.completeTaskEarly();
+                  }} 
+                  className="p-1.5 rounded-md text-green-500 hover:bg-green-100 hover:text-green-600 transition-colors animate-pulse" 
+                  title="タスク完了！(休憩に入る)"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+              )}
               {onPromoteToRoutine && !isRoutine && task.status !== 'done' && (
                 <button onClick={() => onPromoteToRoutine(task.text)} className="p-1.5 rounded-md hover:bg-indigo-100 text-gray-400 hover:text-indigo-500 transition-colors" title="Make it Daily Routine">
                   <Repeat className="w-4 h-4" />

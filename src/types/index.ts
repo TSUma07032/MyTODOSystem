@@ -4,6 +4,8 @@
 // 1. TODOコアシステム関連の型
 // ==========================================
 
+export type AppMode = 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro';
+
 /**
  * 🚀 新時代（JSON）のメインタスク型
  * アプリケーション全体で引き回される、美しくフラットなデータ構造
@@ -20,7 +22,11 @@ export interface Task {
   routineType?: 'daily' | 'weekly';
   routineId?: string;
   difficulty: number;
+  totalWorkTime?: number;
+  isQueue?: boolean; // ポモドーロキューに入っているかどうか
 }
+
+export type PomodoroMode = 'idle' | 'work' | 'break' | 'freeze';
 
 /**
  * 📝 パーサー用の中間データ型

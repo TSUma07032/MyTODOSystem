@@ -5,7 +5,7 @@ import { Sun, Moon, History as HistoryIcon, CalendarDays } from 'lucide-react';
 import type { Task, Event } from '../types';
 
 interface ViewDataSource {
-  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar';
+  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro';
   historyItems: any[];
   searchQuery: string;
   currentDate: Date;

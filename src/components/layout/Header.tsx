@@ -1,14 +1,14 @@
 // src/components/layout/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Coins, Repeat, FolderOpen, Server, 
+  Coins, Repeat, FolderOpen, Server, Play, Pause, Square, Coffee, Snowflake,
   Sun, Moon, CalendarDays, History as HistoryIcon, CheckSquare,
-  Copy, CheckCircle, Sparkles, ArrowRight
+  Copy, CheckCircle, Sparkles, ArrowRight, Timer
 } from 'lucide-react';
 
 interface HeaderProps {
-  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar';
-  setMode: (mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar') => void;
+  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro';
+  setMode: (mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro') => void;
   themeIcon: React.ElementType;
   themeAccent: string;
   coins: number;
@@ -21,6 +21,7 @@ interface HeaderProps {
   copied?: boolean;
   onSync?: () => void;
   isSyncing?: boolean;
+  pomodoro: any; 
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -37,11 +38,18 @@ export const Header: React.FC<HeaderProps> = ({
   onCopy,
   copied,
   onSync,
-  isSyncing
+  isSyncing,
+  pomodoro
 }) => {
   const isSync = mode === 'sync';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   // メニュー外クリックで閉じる処理
   useEffect(() => {
@@ -61,6 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'calendar', label: 'Calendar', icon: CalendarDays, color: 'text-emerald-500', bg: 'bg-emerald-50 hover:bg-emerald-100' },
     { id: 'history', label: 'History', icon: HistoryIcon, color: 'text-blue-500', bg: 'bg-blue-50 hover:bg-blue-100' },
     { id: 'sync', label: 'Night Sync', icon: Moon, color: 'text-purple-500', bg: 'bg-purple-50 hover:bg-purple-100' },
+    { id: 'pomodoro', label: 'Focus', icon: Timer, color: 'text-orange-500', bg: 'bg-orange-50 hover:bg-orange-100' },
   ] as const;
 
   return (
@@ -96,6 +105,55 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
+      {pomodoro.mode !== 'idle' && (
+        <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-white/80 backdrop-blur px-4 py-1.5 rounded-full shadow-sm border">
+          {/* ステータスアイコン＆時間 */}
+          <div className={`flex items-center gap-2 font-mono text-lg font-bold ${
+            pomodoro.mode === 'work' ? 'text-orange-600' :
+            pomodoro.mode === 'break' ? 'text-green-600' : 'text-blue-500'
+          }`}>
+            {pomodoro.mode === 'work' && <Play className="w-5 h-5 animate-pulse" />}
+            {pomodoro.mode === 'break' && <Coffee className="w-5 h-5" />}
+            {pomodoro.mode === 'freeze' && <Snowflake className="w-5 h-5" />}
+            {formatTime(pomodoro.remainingTime)}
+          </div>
+
+          {/* アクションボタン群 */}
+          <div className="flex items-center gap-1 border-l pl-3 ml-1">
+            {/* 凍結（ご飯）ボタン */}
+            {(pomodoro.mode === 'work' || pomodoro.mode === 'freeze') && (
+              <button 
+                onClick={pomodoro.toggleFreeze}
+                className={`p-1.5 rounded-md transition-colors ${
+                  pomodoro.mode === 'freeze' 
+                    ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' 
+                    : 'text-gray-400 hover:bg-blue-50 hover:text-blue-500'
+                }`}
+                title={`凍結 (残り ${pomodoro.maxFreeze - pomodoro.freezeCount}回)`}
+              >
+                {pomodoro.mode === 'freeze' ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+              </button>
+            )}
+            
+            {/* 強制終了（ペナルティ）ボタン */}
+            {(pomodoro.mode === 'work' || pomodoro.mode === 'freeze') && (
+              <button 
+                onClick={() => {
+                  if(window.confirm("🚨 本当に中断しますか？ 100🪙のペナルティが発生します！")) {
+                    pomodoro.stopEarly();
+                  }
+                }}
+                className="p-1.5 rounded-md text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                title="中断して諦める（ペナルティ有）"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {/* ================================================= */}
+
       {/* 🕹️ 中央：各種機能へのアクセス（変更なし） */}
       <div className="flex-1 flex flex-col gap-5 items-center w-full mt-4">
         {/* Shop */}
@@ -127,6 +185,8 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="absolute left-20 px-3 py-1.5 bg-slate-800 text-white font-bold text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap shadow-xl z-50">Routines</span>
         </button>
       </div>
+
+      
 
       {/* 🚀 ボトムアクション（コピー・同期・フォルダ） */}
       <div className="mt-auto w-full flex flex-col items-center gap-4">

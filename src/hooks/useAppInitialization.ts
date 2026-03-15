@@ -6,7 +6,7 @@ import { parseMarkdown } from '../utils/parser';
 import { migrateMarkdownToJson } from '../utils/migrator';
 
 interface InitializationProps {
-  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar';
+  mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro';
   isReady: boolean;
   readFile: (filename: string) => Promise<string | null>;
   writeFile: (filename: string, content: string) => Promise<void>;

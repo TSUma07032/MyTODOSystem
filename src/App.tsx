@@ -8,6 +8,7 @@ import { useTasks } from './hooks/useTasks';
 import { useGamification } from './hooks/useGamification';
 import { useRoutines } from './hooks/useRoutines';
 import { useEvents } from './hooks/useEvents';
+import { usePomodoro } from './hooks/usePomodoro';
 
 // Components (Layout & Views)
 import { Header } from './components/layout/Header';
@@ -15,6 +16,7 @@ import { DashboardView } from './components/views/DashboardView';
 import { DailyView } from './components/views/DailyView';
 import { CalendarView } from './components/views/CalendarView';
 import { HistoryView } from './components/views/HistoryView';
+import { PomodoroView } from './components/views/PomodoroView';
 
 // Components (Features & UI)
 import { ShopDrawer } from './components/features/shops/ShopDrawer';
@@ -38,7 +40,7 @@ import type { Task } from './types';
 
 function App() {
   // 1. アプリケーションのグローバルな状態
-  const [mode, setMode] = useState<'dashboard' | 'daily' | 'sync' | 'history' | 'calendar'>('dashboard');
+  const [mode, setMode] = useState<'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro'>('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<{message: string, difficulty: number, id: number} | null>(null);
@@ -58,6 +60,8 @@ function App() {
   // ドロワーの開閉ステートを追加
   const [isInfrastructureDrawerOpen, setIsInfrastructureDrawerOpen] = useState(false);
 
+  const [pomodoroQueue, setPomodoroQueue] = useState<string[]>([]);
+
   // 2. カスタムフックの初期化
   const { 
     dirHandle, isReady, pickDirectory, verifyPermission, 
@@ -67,7 +71,8 @@ function App() {
   const {
     tasks, setTasks, 
     toggleTaskStatus, changeDifficulty,
-    updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateTasksAndSave
+    updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateTasksAndSave,
+    addWorkTime
   } = useTasks(writeFile);
 
   const {
@@ -82,6 +87,8 @@ function App() {
     modules, debt, initInfrastructure, mineModule, toggleModuleStatus, processSettlement, upgradeModule, resonateModule, repayDebt, sellModule
   } = useInfrastructure(gamification.coins, addCoins, removeCoins, writeFile);
 
+  
+  
   const {
     routines, initRoutines, completedDailyIds, initDailyProgress,
     isRoutineDrawerOpen, setIsRoutineDrawerOpen,
@@ -126,6 +133,13 @@ function App() {
     setToast({ message, difficulty, id: Date.now() });
     setTimeout(() => setToast(null), 3000); 
   };
+
+  const pomodoro = usePomodoro(
+    removeCoins, 
+    addCoins, 
+    addWorkTime, 
+    showToast
+  );
 
   const handleToggleTaskApp = async (taskId: string) => {
     const result = await toggleTaskStatus(taskId);
@@ -238,6 +252,19 @@ function App() {
     setTimeout(() => setCopied(false), 2000); 
   };
 
+  // キューに追加する関数
+  const handleAddToQueue = (taskId: string) => {
+    if (!pomodoroQueue.includes(taskId) && pomodoro.taskId !== taskId) {
+      setPomodoroQueue(prev => [...prev, taskId]);
+      showToast("Focus Queueに追加しました！", 1);
+    }
+  };
+
+  // キューから削除する関数
+  const handleRemoveFromQueue = (taskId: string) => {
+    setPomodoroQueue(prev => prev.filter(id => id !== taskId));
+  };
+
   // 1. Appコンポーネント内のState宣言部に追加
   const [rawMarkdown, setRawMarkdown] = useState("");
 
@@ -334,10 +361,22 @@ function App() {
         copied={copied} 
         onSync={handleSyncAndSave} 
         isSyncing={isSyncing}
+        pomodoro={pomodoro}
       />
 
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col overflow-hidden relative animate-fadeIn">
+
+        {mode === 'pomodoro' && (
+          <PomodoroView 
+            pomodoro={pomodoro} 
+            tasks={tasks} 
+            onToggleTask={handleToggleTaskApp} 
+            queue={pomodoroQueue}
+            onAddToQueue={handleAddToQueue}
+            onRemoveFromQueue={handleRemoveFromQueue}
+          />
+        )}
         
         {/* History モード */}
         {mode === 'history' && (
@@ -353,8 +392,8 @@ function App() {
           />
         )}
 
-        {/* Dashboard, Daily, Sync, Calendar モード共通ラッパー */}
-        {(mode === 'dashboard' || mode === 'daily' || mode === 'sync' || mode === 'calendar') && (
+        {/* Dashboard, Daily, Sync, Calendar, Pomodoro モード共通ラッパー */}
+        {(mode === 'dashboard' || mode === 'daily' || mode === 'sync' || mode === 'calendar' || mode === 'pomodoro') && (
           <div className="flex w-full h-full animate-fadeIn">
             
             {/* 左側：生テキストエディタ（Syncモード時のみ表示） */}
@@ -398,7 +437,7 @@ function App() {
                 
                 {(mode === 'dashboard' || mode === 'sync') && (
                   <DashboardView 
-                    tasks={tasks} mode={mode} isSyncing={isSyncing} 
+                    tasks={tasks} pomodoro={pomodoro} mode={mode} isSyncing={isSyncing} 
                     newTaskText={newTaskText} setNewTaskText={setNewTaskText} 
                     onAddNewTask={() => { addNewTask(newTaskText); setNewTaskText(''); }} 
                     onToggleTask={handleToggleTaskApp} onUpdateDeadline={updateDeadline} 
@@ -406,6 +445,7 @@ function App() {
                     onDeleteTask={deleteTask} onMoveTask={moveTask} 
                     onPromoteToRoutine={(text) => saveRoutineJSON({ text, type: 'daily', deadlineRule: 'none' })} 
                     onChangeDifficulty={changeDifficulty} 
+                    onAddToQueue={handleAddToQueue}
                   />
                 )}
               </div>

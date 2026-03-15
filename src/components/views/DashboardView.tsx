@@ -1,5 +1,5 @@
 // src/components/views/DashboardView.tsx
-import React from 'react';
+import React, {useState} from 'react';
 import { Plus } from 'lucide-react';
 import { TaskRow } from '../TaskRow';
 import type { Task } from '../../types';
@@ -22,6 +22,8 @@ interface DashboardViewProps {
   onMoveTask: (dragId: string, dropId: string) => void;
   onPromoteToRoutine: (text: string) => void;
   onChangeDifficulty: (id: string, currentDiff: number) => void;
+  pomodoro: any;
+  onAddToQueue: (id: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -38,32 +40,68 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onDeleteTask,
   onMoveTask,
   onPromoteToRoutine,
-  onChangeDifficulty
+  onChangeDifficulty,
+  pomodoro,
+  onAddToQueue
 }) => {
   const isNightMode = mode === 'sync';
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // 親タスクがすべて展開されているかチェックする関数
+  const isTaskVisible = (task: Task) => {
+    if (!task.parentId) return true; // ルート要素は常に表示
+    
+    let currentParentId: string | null = task.parentId;
+    while (currentParentId) {
+      if (!expandedIds.has(currentParentId)) return false; // 途中の親が閉じていれば非表示
+      const parent = tasks.find(t => t.id === currentParentId);
+      currentParentId = parent?.parentId || null;
+    }
+    return true;
+  };
 
   return (
     <div className="animate-fadeIn space-y-2 pb-10">
       {/* タスクリストのレンダリング */}
       {tasks
-        .filter(t => t.routineType !== 'daily') // デイリーは専用画面があるため除外
-        .map((task) => (
-          <TaskRow 
-            key={task.id} 
-            task={task} 
-            indent = {getTaskIndent(task.id, tasks)}
-            isSyncing={isSyncing} 
-            isNightMode={isNightMode}
-            onToggle={onToggleTask} 
-            onUpdateDeadline={onUpdateDeadline}
-            onAddSubTask={onAddSubTask}
-            onUpdateText={onUpdateText} 
-            onDeleteTask={onDeleteTask} 
-            onMoveTask={onMoveTask}
-            onPromoteToRoutine={onPromoteToRoutine}
-            onChangeDifficulty={onChangeDifficulty} 
-          />
-        ))}
+        .filter(t => t.routineType !== 'daily' &&  isTaskVisible (t)) 
+        .map((task) => {
+          const hasChildren = tasks.some(child => child.parentId === task.id);
+          
+          return (
+            <TaskRow 
+              key={task.id} 
+              task={task} 
+              indent={getTaskIndent(task.id, tasks)}
+              isSyncing={isSyncing} 
+              isNightMode={isNightMode}
+              hasChildren={hasChildren}
+              isExpanded={expandedIds.has(task.id)}
+              onToggleExpand={() => toggleExpand(task.id)}
+              onToggle={onToggleTask} 
+              onUpdateDeadline={onUpdateDeadline}
+              onAddSubTask={onAddSubTask}
+              onUpdateText={onUpdateText} 
+              onDeleteTask={onDeleteTask} 
+              onMoveTask={onMoveTask}
+              onPromoteToRoutine={onPromoteToRoutine}
+              onChangeDifficulty={onChangeDifficulty}
+
+              pomodoro={pomodoro} 
+              onAddToQueue={onAddToQueue}
+            />
+          );
+        })}
 
       {/* 新規ミッション追加フィールド (Dashboardモード時のみ表示) */}
       {mode === 'dashboard' && (

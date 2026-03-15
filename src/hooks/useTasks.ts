@@ -151,9 +151,20 @@ export const useTasks = (
     await updateTasksAndSave(newTasks);
   };
 
+  // ✅ 9. 作業時間の追加
+  const addWorkTime = async (taskId: string, minutes: number) => {
+    const newTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, totalWorkTime: (t.totalWorkTime || 0) + minutes };
+      }
+      return t;
+    });
+    await updateTasksAndSave(newTasks);
+  };
+
   return {
     tasks,
-    setTasks, // App.tsxやuseAppInitializationで使えるように公開！
+    setTasks, 
     toggleTaskStatus,
     changeDifficulty,
     updateDeadline,
@@ -162,6 +173,7 @@ export const useTasks = (
     addSubTask,
     moveTask,
     addNewTask,
-    updateTasksAndSave // 旧 updateInputAndSave の代わり
+    updateTasksAndSave ,
+    addWorkTime
   };
 };
