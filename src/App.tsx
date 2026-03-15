@@ -7,6 +7,7 @@ import { useFileSystem } from './hooks/useFileSystem';
 import { useTasks } from './hooks/useTasks';
 import { useGamification } from './hooks/useGamification';
 import { useRoutines } from './hooks/useRoutines';
+import { useEvents } from './hooks/useEvents';
 
 // Components (Layout & Views)
 import { Header } from './components/layout/Header';
@@ -32,6 +33,8 @@ import { useAppViewData } from './hooks/useAppViewData';
 import { tasksToMarkdown } from './utils/markdownSync';
 import { parseMarkdown } from './utils/parser';
 import { migrateMarkdownToJson } from './utils/migrator';
+
+import type { Task } from './types';
 
 function App() {
   // 1. アプリケーションのグローバルな状態
@@ -85,10 +88,38 @@ function App() {
     drawerRoutineType, setDrawerRoutineType, drawerRoutineText, setDrawerRoutineText,
     drawerGenerateOn, setDrawerGenerateOn, drawerDeadline, setDrawerDeadline,
     saveRoutineJSON, deleteRoutineJSON, handleAddRoutineFromDrawer, toggleDailyProgress
-  } = useRoutines(writeFile, async (newLine) => {
-    // ⚠️ ルーチンのテキスト追加処理はいったん無効化します（後でJSON用の追加ロジックにします）
-    console.log("Routine triggered:", newLine);
+  } = useRoutines(writeFile, async (routine) => {
+    
+    // 🚀 文字列の切り貼りではなく、美しいTaskオブジェクトを直接生成して追加！
+    let deadlineStr = undefined;
+    if (routine.deadlineRule === 'today') { 
+      deadlineStr = format(new Date(), 'M/d');
+    } else if (routine.deadlineRule !== 'none') {
+       const daysMap: Record<string, number> = { 'Sun':0, 'Mon':1, 'Tue':2, 'Wed':3, 'Thu':4, 'Fri':5, 'Sat':6 };
+       let diff = daysMap[routine.deadlineRule] - new Date().getDay();
+       if (diff < 0) diff += 7; 
+       const targetDate = new Date(new Date().setDate(new Date().getDate() + diff));
+       deadlineStr = `${targetDate.getMonth()+1}/${targetDate.getDate()}`;
+    }
+
+    const newTask: Task = {
+      id: `task-${Date.now()}`,
+      text: routine.text,
+      status: 'todo',
+      parentId: null,
+      order: tasks.length,
+      difficulty: 2,
+      routineType: routine.type,
+      routineId: routine.id,
+      deadline: deadlineStr
+    };
+
+    // StateとJSONファイルの両方を更新
+    await updateTasksAndSave([...tasks, newTask]);
+    showToast(`ルーチン「${routine.text}」がタスクに追加されました！`, 1);
   });
+
+  const { events, setEvents, addEvent, updateEvent, deleteEvent } = useEvents(writeFile);
 
   // 3. ユーティリティ・アクション関数
   const showToast = (message: string, difficulty: number) => {
@@ -245,7 +276,9 @@ function App() {
   useAppInitialization({
     mode, isReady, readFile, writeFile,
     initDailyProgress, initGamification, initRoutines, initInfrastructure,
-    setTasks, setHistoryItems, 
+    setTasks, 
+    setEvents,
+    setHistoryItems, 
     routines, onPenalty: handlePenalty
   });
 
@@ -273,7 +306,8 @@ function App() {
 
   // 5. 導出ステート (useMemo群)
   const { groupedHistory, calendarDays, themeConfig } = useAppViewData({
-    mode, historyItems, searchQuery, currentDate, tasks
+    mode, historyItems, searchQuery, currentDate, tasks, 
+    events
   });
 
 
@@ -347,7 +381,10 @@ function App() {
                   <CalendarView 
                     currentDate={currentDate} setCurrentDate={setCurrentDate} 
                     calendarDays={calendarDays} selectedDay={selectedDay} 
-                    setSelectedDay={setSelectedDay} onToggleTask={handleToggleTaskApp} 
+                    setSelectedDay={setSelectedDay} onToggleTask={handleToggleTaskApp}
+                    onAddEvent={addEvent} 
+                    onUpdateEvent={updateEvent} // ★追加
+                    onDeleteEvent={deleteEvent} // ★追加
                   />
                 )}
                 

@@ -1,8 +1,8 @@
 // src/hooks/useAppViewData.ts
 import { useMemo } from 'react';
-import { startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, format } from 'date-fns';
 import { Sun, Moon, History as HistoryIcon, CalendarDays } from 'lucide-react';
-import type { Task } from '../types';
+import type { Task, Event } from '../types';
 
 interface ViewDataSource {
   mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar';
@@ -10,6 +10,7 @@ interface ViewDataSource {
   searchQuery: string;
   currentDate: Date;
   tasks: Task[];
+  events: Event[];
 }
 
 export const useAppViewData = ({
@@ -17,7 +18,8 @@ export const useAppViewData = ({
   historyItems,
   searchQuery,
   currentDate,
-  tasks
+  tasks,
+  events
 }: ViewDataSource) => {
   
   // 1. 履歴データのグループ化と検索フィルタリング
@@ -35,26 +37,44 @@ export const useAppViewData = ({
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
     const days = eachDayOfInterval({ start: startOfWeek(monthStart), end: endOfWeek(endOfMonth(monthStart)) });
+    
     return days.map(day => {
+        // --- タスクの処理 ---
         const dateStr = `${day.getMonth() + 1}/${day.getDate()}`;
         const rootTasks = tasks.filter(t => t.deadline === dateStr && t.status !== 'done');
+        
+        // ★修正: parentId を使って再帰的に子孫タスクを取得する関数
+        const getDescendants = (parentId: string): Task[] => {
+          const children = tasks.filter(t => t.parentId === parentId);
+          let descendants: Task[] = [];
+          for (const child of children) {
+            if (child.status !== 'done') {
+              descendants.push(child);
+              descendants = descendants.concat(getDescendants(child.id));
+            }
+          }
+          return descendants;
+        };
+
         let displayTasks: Task[] = [];
         rootTasks.forEach(root => {
             displayTasks.push(root);
-            const rootIndex = tasks.findIndex(t => t.id === root.id);
-            if (rootIndex === -1) return;
-            for (let i = rootIndex + 1; i < tasks.length; i++) {
-                if (tasks[i].indent <= root.indent) break;
-                if (tasks[i].status !== 'done') displayTasks.push(tasks[i]);
-            }
+            displayTasks = displayTasks.concat(getDescendants(root.id));
         });
+
+        // --- 予定の処理 ---
+        const dayFormatted = format(day, 'yyyy-MM-dd');
+        const dayEvents = events.filter(e => e.date === dayFormatted);
+
         return { 
           date: day, 
+          // Set等を使って重複を排除（同じタスクが複数回入るのを防ぐ）
           tasks: Array.from(new Map(displayTasks.map(t => [t.id, t])).values()), 
+          events: dayEvents, 
           isCurrentMonth: day.getMonth() === currentDate.getMonth() 
         };
     });
-  }, [currentDate, tasks]);
+  }, [currentDate, tasks, events]);
 
   // 3. モードごとのテーマ設定（色・アイコン）
   const themeConfig = useMemo(() => {

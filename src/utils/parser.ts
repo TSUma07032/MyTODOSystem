@@ -1,30 +1,31 @@
-import { type Task, type ParseResult } from '../types';
+// src/utils/parser.ts
+import type { ParsedTask, ParseResult } from '../types';
 
 export const parseMarkdown = (markdown: string): ParseResult => {
   const lines = markdown.split('\n');
-  const tasks: Task[] = [];
+  
+  // 🚀 修正1: Task[] ではなく ParsedTask[] を使う！
+  const tasks: ParsedTask[] = []; 
+  
   let currentSection = '';
 
   lines.forEach((line, index) => {
-    // 見出しの抽出
     const headerMatch = line.match(/^#+\s+(.+)$/);
     if (headerMatch) {
       currentSection = headerMatch[1];
       return;
     }
 
-    // ★ 標準的で美しいMarkdownリストのみを許容する正規表現
     const taskMatch = line.match(/^(\s*)-\s\[([ xX])\]\s+(.+)$/);
     
     if (taskMatch) {
-      // 🚀 修正: タブ文字(\t)をスペース4つ分として換算し、純粋な「空白の長さ」を算出！
-      // 2で割るのをやめ、この物理的な長さをそのまま migrator に渡します。
+      // タブ文字をスペース4つに換算する超寛容アルゴリズム
       const rawIndentWidth = taskMatch[1].replace(/\t/g, '    ').length;
       
       const status = taskMatch[2].trim() ? 'done' : 'todo';
       let text = taskMatch[3];
 
-      // 1. ルーチンの隠しタグの抽出
+      // 各種メタデータの抽出
       const routineRegex = /\((daily|weekly):([-\w]+)\)/;
       const routineMatch = text.match(routineRegex);
       let routineType: 'daily' | 'weekly' | undefined = undefined;
@@ -36,34 +37,31 @@ export const parseMarkdown = (markdown: string): ParseResult => {
         text = text.replace(routineRegex, '').trim(); 
       }
 
-      // 2. 難易度の抽出 (★X)
-      let difficulty = 2; // デフォルトは★2
+      let difficulty = 2;
       const diffMatch = text.match(/\(★(\d+)\)/);
       if (diffMatch) {
         difficulty = parseInt(diffMatch[1], 10);
         text = text.replace(/\(★\d+\)/, '').trim();
       }
 
-      // 3. 期限の抽出 (@MM/DD)
       const deadlineMatch = text.match(/\(@(\d{1,2}\/\d{1,2})\)/);
       const deadline = deadlineMatch ? deadlineMatch[1] : undefined;
       text = text.replace(/\(@\d{1,2}\/\d{1,2}\)/, '').trim();
 
-      // 4. 見積もりの抽出 (30m) など
       const estimateMatch = text.match(/\(([^)]+)\)$/);
       const estimate = estimateMatch ? estimateMatch[1] : undefined;
       if (estimateMatch) {
         text = text.replace(/\([^)]+\)$/, '').trim();
       }
 
-      // 最後に残った text が、純粋なタスク名になる
+      // 🚀 修正2: ParsedTaskの型に合わせて、物理インデントや行番号をしっかり持たせる！
       tasks.push({
-        id: `task-line-${index}`, // 行番号固定ID（DOM破壊防止）
+        id: `task-line-${index}`, 
         text,
         status,
-        indent: rawIndentWidth, // ★物理的なインデント幅をそのまま保存
-        lineNumber: index + 1,
-        originalRaw: line,
+        indent: rawIndentWidth,     // 👈 これを入れることでエラー3が消滅！
+        lineNumber: index + 1,      // 👈 Markdownとしての物理行番号
+        originalRaw: line,          // 👈 Markdownとしての生テキスト
         estimate,
         deadline,
         section: currentSection,
@@ -74,5 +72,6 @@ export const parseMarkdown = (markdown: string): ParseResult => {
     }
   });
 
+  // 🚀 修正3: 型通り、ParsedTask[] が入った ParseResult を返す
   return { tasks };
 };

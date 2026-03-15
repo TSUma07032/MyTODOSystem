@@ -1,6 +1,6 @@
 // src/hooks/useAppInitialization.ts
 import { useEffect } from 'react';
-import { format } from 'date-fns'; // 👈 復活
+import { format } from 'date-fns'; 
 import type { Routine, DailyProgress, GamificationData, InfrastructureModule, Task } from '../types';
 import { parseMarkdown } from '../utils/parser';
 import { migrateMarkdownToJson } from '../utils/migrator';
@@ -15,7 +15,8 @@ interface InitializationProps {
   initRoutines: (data: Routine[]) => void;
   initInfrastructure: (modules: InfrastructureModule[], debt: number) => void;
   setTasks: (tasks: Task[]) => void;
-  setHistoryItems: (items: any[]) => void; // 👈 復活
+  setEvents: (events: any[]) => void;
+  setHistoryItems: (items: any[]) => void; 
   routines: Routine[]; 
   onPenalty: (missedCount: number) => void; 
 }
@@ -23,7 +24,7 @@ interface InitializationProps {
 export const useAppInitialization = ({
   mode, isReady, readFile, writeFile,
   initDailyProgress, initGamification, initRoutines, initInfrastructure,
-  setTasks, setHistoryItems, // 👈 復活
+  setTasks, setEvents, setHistoryItems, 
   routines, onPenalty
 }: InitializationProps) => {
 
@@ -48,6 +49,18 @@ export const useAppInitialization = ({
   useEffect(() => {
     const loadData = async () => {
       if ((mode === 'dashboard' || mode === 'calendar') && isReady) {
+        
+        // --- 予定（Events）の読み込み (★ここを追加) ---
+        try {
+          const eventsContent = await readFile('current_active_events.json');
+          if (eventsContent) {
+            setEvents(JSON.parse(eventsContent));
+          } else {
+            setEvents([]); // ファイルが無ければ空配列
+          }
+        } catch (e) {
+          console.error("Failed to load events", e);
+        }
         
         // --- タスクの読み込み＆マイグレーション ---
         let loadedTasks: Task[] = [];
