@@ -72,7 +72,7 @@ function App() {
     tasks, setTasks, 
     toggleTaskStatus, changeDifficulty,
     updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateTasksAndSave,
-    addWorkTime
+    addWorkTime, setWorkTime
   } = useTasks(writeFile);
 
   const {
@@ -375,6 +375,25 @@ function App() {
             queue={pomodoroQueue}
             onAddToQueue={handleAddToQueue}
             onRemoveFromQueue={handleRemoveFromQueue}
+            
+            // 作業時間の手動更新
+            onUpdateWorkTime={setWorkTime}
+            
+            // 親子テンプレの一括展開＆キュー自動追加ロジック
+            onAddTemplate={async (templateName, subTasks) => {
+              const parentId = `task-${Date.now()}`;
+              const parentTask: Task = { 
+                id: parentId, text: templateName, status: 'todo', 
+                parentId: null, order: tasks.length, difficulty: 2 
+              };
+              const newChildTasks: Task[] = subTasks.map((text, i) => ({
+                id: `task-${Date.now() + i + 1}`, text, status: 'todo', 
+                parentId: parentId, order: i, difficulty: 1
+              }));
+              
+              await updateTasksAndSave([...tasks, parentTask, ...newChildTasks]);
+              handleAddToQueue(parentId); // 追加後、自動で親タスクをキューに入れる！
+            }}
           />
         )}
         

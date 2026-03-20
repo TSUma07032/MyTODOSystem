@@ -162,6 +162,17 @@ export const useTasks = (
     await updateTasksAndSave(newTasks);
   };
 
+  // 10. 作業時間の直接上書き（手動編集用）
+  const setWorkTime = async (taskId: string, minutes: number) => {
+    const newTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        return { ...t, totalWorkTime: minutes };
+      }
+      return t;
+    });
+    await updateTasksAndSave(newTasks);
+  };
+
   return {
     tasks,
     setTasks, 
@@ -174,6 +185,7 @@ export const useTasks = (
     moveTask,
     addNewTask,
     updateTasksAndSave ,
-    addWorkTime
+    addWorkTime,
+    setWorkTime
   };
 };

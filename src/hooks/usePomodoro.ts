@@ -1,12 +1,12 @@
 // src/hooks/usePomodoro.ts
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { PomodoroMode } from '../types';
 
-const WORK_TIME = 25 * 60;    // 25分（秒）
-const BREAK_TIME = 10 * 60;   // 10分休憩
-const FREEZE_TIME = 40 * 60;  // 40分ご飯・緊急離席
-const PENALTY_COINS = 100;    // 中断ペナルティ
-const MAX_FREEZE = 3;         // 1日の凍結上限
+const WORK_TIME = 25 * 60;    
+const BREAK_TIME = 10 * 60;   
+const FREEZE_TIME = 40 * 60;  
+const PENALTY_COINS = 100;    
+const MAX_FREEZE = 3;         
 
 export const usePomodoro = (
   removeCoins: (amount: number) => Promise<void>,
@@ -18,10 +18,53 @@ export const usePomodoro = (
   const [taskId, setTaskId] = useState<string | null>(null);
   const [remainingTime, setRemainingTime] = useState(0);
   
-  const [savedWorkTime, setSavedWorkTime] = useState(0); // 凍結復帰用
-  const [freezeCount, setFreezeCount] = useState(0);     // 本日の凍結回数
+  const [savedWorkTime, setSavedWorkTime] = useState(0); 
+  const [savedMode, setSavedMode] = useState<'work' | 'break'>('work'); // 🌟 追加：凍結前のモードを記憶
+  const [freezeCount, setFreezeCount] = useState(0);     
 
-  // 1日の凍結回数をリセット＆ロード
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isBreakAlarming, setIsBreakAlarming] = useState(false); // 🌟 追加：休憩超過アラーム状態
+  
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+
+  const playAlarm = () => {
+    stopAlarm(); // 🌟 バグ修正：重複して鳴るのを防ぐ
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    
+    const lfo = ctx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 2;
+    lfo.connect(gainNode.gain);
+    lfo.start();
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    osc.start();
+
+    audioCtxRef.current = ctx;
+    oscillatorRef.current = osc;
+  };
+
+  const stopAlarm = () => {
+    if (oscillatorRef.current) {
+      try { oscillatorRef.current.stop(); } catch(e){}
+      oscillatorRef.current.disconnect();
+    }
+    if (audioCtxRef.current) {
+      try { audioCtxRef.current.close(); } catch(e){}
+    }
+    oscillatorRef.current = null;
+    audioCtxRef.current = null;
+  };
+
+  const muteAlarm = () => stopAlarm(); // 🌟 手動停止用
+
   useEffect(() => {
     const today = new Date().toDateString();
     const lastDate = localStorage.getItem('lastFreezeDate');
@@ -34,38 +77,38 @@ export const usePomodoro = (
     }
   }, []);
 
-  // タイマーのカウントダウン処理
   useEffect(() => {
-    if (mode === 'idle') return;
+    if (mode === 'idle' || isConfirming) return;
 
     const timer = setInterval(() => {
       setRemainingTime((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleTimerEnd();
-          return 0;
+        // 🌟 変更：休憩中は0になっても止まらず、マイナスに突入させる！
+        if (mode === 'break') {
+          if (prev === 1) { 
+            setIsBreakAlarming(true);
+            playAlarm(); // ちょうど0になる瞬間にアラーム
+          }
+          return prev - 1; 
+        } else {
+          // work または freeze
+          if (prev <= 1) {
+            clearInterval(timer);
+            handleTimerEnd();
+            return 0;
+          }
+          return prev - 1;
         }
-        return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [mode]);
+  }, [mode, isConfirming]);
 
-  // 各モードの時間がゼロになった時の処理
   const handleTimerEnd = async () => {
     if (mode === 'work') {
-      setMode('break');
-      setRemainingTime(BREAK_TIME);
-      await addCoins(50);
-      if (taskId) await onAddWorkTime(taskId, 25);
-      showToast("🎉 25分達成！ 50🪙獲得＆10分休憩に入ります", 1);
-    } else if (mode === 'break') {
-      setMode('idle');
-      setTaskId(null);
-      showToast("休憩終了。次のタスクを選びましょう！", 2);
+      setIsConfirming(true);
+      playAlarm();
     } else if (mode === 'freeze') {
-      // 🚨 40分以内に戻らなかった場合の強制ペナルティ
       setMode('idle');
       setTaskId(null);
       await removeCoins(PENALTY_COINS);
@@ -73,25 +116,53 @@ export const usePomodoro = (
     }
   };
 
-  // --- アクション群 ---
+  const resetToIdle = () => {
+    stopAlarm();
+    setIsConfirming(false);
+    setIsBreakAlarming(false);
+    setMode('idle');
+    setTaskId(null);
+  };
+
+  const confirmComplete = async () => {
+    stopAlarm();
+    setIsConfirming(false);
+    setMode('break');
+    setRemainingTime(BREAK_TIME);
+    await addCoins(50);
+    if (taskId) await onAddWorkTime(taskId, 25);
+    showToast("🎉 25分達成！ 50🪙獲得＆10分休憩に入ります", 1);
+  };
+
+  const confirmExtend = async () => {
+    stopAlarm();
+    setIsConfirming(false);
+    setMode('break');
+    setRemainingTime(BREAK_TIME);
+    if (taskId) await onAddWorkTime(taskId, 25); 
+    showToast("💪 ナイスファイト！一旦10分休憩して次に備えましょう", 2);
+  };
+
   const startWork = (id: string) => {
+    stopAlarm(); // 🌟 次を開始する時にアラームを止める
+    setIsBreakAlarming(false);
     setTaskId(id);
     setMode('work');
     setRemainingTime(WORK_TIME);
+    setIsConfirming(false); 
     showToast("集中モード開始！離脱するとペナルティです", 3);
   };
 
   const stopEarly = async () => {
     await removeCoins(PENALTY_COINS);
-    setMode('idle');
-    setTaskId(null);
+    resetToIdle();
     showToast(`🚨 早期離脱ペナルティ: -${PENALTY_COINS}🪙`, 5);
   };
 
   const completeTaskEarly = async () => {
     const minutesWorked = Math.ceil((WORK_TIME - remainingTime) / 60);
     if (taskId) await onAddWorkTime(taskId, minutesWorked);
-    await addCoins(50); // 早く終わらせたご褒美
+    await addCoins(50); 
     setMode('break');
     setRemainingTime(BREAK_TIME);
     showToast(`タスク完了！ (${minutesWorked}分) 10分休憩に入ります`, 1);
@@ -99,16 +170,15 @@ export const usePomodoro = (
 
   const toggleFreeze = () => {
     if (mode === 'freeze') {
-      // 解凍して作業再開
-      setMode('work');
+      setMode(savedMode); // 🌟 work か break の元の状態に戻る！
       setRemainingTime(savedWorkTime);
-      showToast("作業を再開します", 1);
-    } else if (mode === 'work') {
-      // 凍結開始
+      showToast(savedMode === 'work' ? "作業を再開します" : "休憩を再開します", 1);
+    } else if (mode === 'work' || mode === 'break') { // 🌟 休憩中も凍結可能に！
       if (freezeCount >= MAX_FREEZE) {
         showToast("本日のご飯(凍結)ボタンは上限(3回)に達しています", 4);
         return;
       }
+      setSavedMode(mode); // 🌟 元のモードを記録
       setSavedWorkTime(remainingTime);
       setMode('freeze');
       setRemainingTime(FREEZE_TIME);
@@ -119,5 +189,9 @@ export const usePomodoro = (
     }
   };
 
-  return { mode, taskId, remainingTime, freezeCount, maxFreeze: MAX_FREEZE, startWork, stopEarly, completeTaskEarly, toggleFreeze };
+  return { 
+    mode, taskId, remainingTime, freezeCount, maxFreeze: MAX_FREEZE, 
+    startWork, stopEarly, completeTaskEarly, toggleFreeze,
+    isConfirming, confirmComplete, confirmExtend, muteAlarm, isBreakAlarming // 🌟 追加エクスポート
+  };
 };
