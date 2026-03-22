@@ -19,17 +19,17 @@ export const usePomodoro = (
   const [remainingTime, setRemainingTime] = useState(0);
   
   const [savedWorkTime, setSavedWorkTime] = useState(0); 
-  const [savedMode, setSavedMode] = useState<'work' | 'break'>('work'); // 🌟 追加：凍結前のモードを記憶
+  const [savedMode, setSavedMode] = useState<'work' | 'break'>('work');
   const [freezeCount, setFreezeCount] = useState(0);     
 
   const [isConfirming, setIsConfirming] = useState(false);
-  const [isBreakAlarming, setIsBreakAlarming] = useState(false); // 🌟 追加：休憩超過アラーム状態
+  const [isBreakAlarming, setIsBreakAlarming] = useState(false); 
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
 
   const playAlarm = () => {
-    stopAlarm(); // 🌟 バグ修正：重複して鳴るのを防ぐ
+    stopAlarm(); 
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gainNode = ctx.createGain();
@@ -63,7 +63,7 @@ export const usePomodoro = (
     audioCtxRef.current = null;
   };
 
-  const muteAlarm = () => stopAlarm(); // 🌟 手動停止用
+  const muteAlarm = () => stopAlarm(); 
 
   useEffect(() => {
     const today = new Date().toDateString();
@@ -77,29 +77,51 @@ export const usePomodoro = (
     }
   }, []);
 
+  // ======================================================================
+  // 🌟 バックグラウンド完全対応版のタイマーロジック
+  // ======================================================================
   useEffect(() => {
     if (mode === 'idle' || isConfirming) return;
 
+    let lastTickTime = Date.now(); // 最後に計算した時間を記録
+
+    // 🌟 インターバルを500msにしておくことで、タブに戻った瞬間の表示復帰を早くする
     const timer = setInterval(() => {
-      setRemainingTime((prev) => {
-        // 🌟 変更：休憩中は0になっても止まらず、マイナスに突入させる！
-        if (mode === 'break') {
-          if (prev === 1) { 
-            setIsBreakAlarming(true);
-            playAlarm(); // ちょうど0になる瞬間にアラーム
+      const now = Date.now();
+      // 前回から何秒経過したかを計算（タブが裏にあるとここが数分＝数百秒になる）
+      const deltaSeconds = Math.floor((now - lastTickTime) / 1000);
+
+      if (deltaSeconds > 0) {
+        lastTickTime += deltaSeconds * 1000; // 処理した秒数分だけ基準時間を進める
+
+        setRemainingTime((prev) => {
+          const nextTime = prev - deltaSeconds;
+
+          if (mode === 'break') {
+            // 休憩中はマイナスに突入させる
+            // ちょうど0をまたいだ瞬間にアラームを鳴らす
+            if (prev > 0 && nextTime <= 0) {
+              // 状態更新(setState)の中で副作用を呼ぶのはReactの非推奨パターンのため、
+              // setTimeoutで非同期に逃がして安全に実行する
+              setTimeout(() => {
+                setIsBreakAlarming(true);
+                playAlarm();
+              }, 0);
+            }
+            return nextTime; 
+          } else {
+            // work または freeze の場合は 0 で止まる
+            if (nextTime <= 0) {
+              clearInterval(timer);
+              // これも同様にsetTimeoutで逃がす
+              setTimeout(() => handleTimerEnd(), 0);
+              return 0;
+            }
+            return nextTime;
           }
-          return prev - 1; 
-        } else {
-          // work または freeze
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleTimerEnd();
-            return 0;
-          }
-          return prev - 1;
-        }
-      });
-    }, 1000);
+        });
+      }
+    }, 500);
 
     return () => clearInterval(timer);
   }, [mode, isConfirming]);
@@ -144,7 +166,7 @@ export const usePomodoro = (
   };
 
   const startWork = (id: string) => {
-    stopAlarm(); // 🌟 次を開始する時にアラームを止める
+    stopAlarm(); 
     setIsBreakAlarming(false);
     setTaskId(id);
     setMode('work');
@@ -170,15 +192,15 @@ export const usePomodoro = (
 
   const toggleFreeze = () => {
     if (mode === 'freeze') {
-      setMode(savedMode); // 🌟 work か break の元の状態に戻る！
+      setMode(savedMode); 
       setRemainingTime(savedWorkTime);
       showToast(savedMode === 'work' ? "作業を再開します" : "休憩を再開します", 1);
-    } else if (mode === 'work' || mode === 'break') { // 🌟 休憩中も凍結可能に！
+    } else if (mode === 'work' || mode === 'break') { 
       if (freezeCount >= MAX_FREEZE) {
         showToast("本日のご飯(凍結)ボタンは上限(3回)に達しています", 4);
         return;
       }
-      setSavedMode(mode); // 🌟 元のモードを記録
+      setSavedMode(mode); 
       setSavedWorkTime(remainingTime);
       setMode('freeze');
       setRemainingTime(FREEZE_TIME);
@@ -192,6 +214,6 @@ export const usePomodoro = (
   return { 
     mode, taskId, remainingTime, freezeCount, maxFreeze: MAX_FREEZE, 
     startWork, stopEarly, completeTaskEarly, toggleFreeze,
-    isConfirming, confirmComplete, confirmExtend, muteAlarm, isBreakAlarming // 🌟 追加エクスポート
+    isConfirming, confirmComplete, confirmExtend, muteAlarm, isBreakAlarming 
   };
 };
