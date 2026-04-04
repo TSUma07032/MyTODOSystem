@@ -60,7 +60,16 @@ function App() {
   // ドロワーの開閉ステートを追加
   const [isInfrastructureDrawerOpen, setIsInfrastructureDrawerOpen] = useState(false);
 
-  const [pomodoroQueue, setPomodoroQueue] = useState<string[]>([]);
+  const [pomodoroQueue, setPomodoroQueue] = useState<string[]>(() => {
+  // 初回レンダリング時に localStorage から保存されたキューを復元
+  const savedQueue = localStorage.getItem('pomodoroQueue');
+  return savedQueue ? JSON.parse(savedQueue) : [];
+});
+
+useEffect(() => {
+  // pomodoroQueue が変更されるたびに localStorage に上書き保存
+  localStorage.setItem('pomodoroQueue', JSON.stringify(pomodoroQueue));
+}, [pomodoroQueue]);
 
   // 2. カスタムフックの初期化
   const { 
@@ -412,7 +421,7 @@ function App() {
         )}
 
         {/* Dashboard, Daily, Sync, Calendar, Pomodoro モード共通ラッパー */}
-        {(mode === 'dashboard' || mode === 'daily' || mode === 'sync' || mode === 'calendar' || mode === 'pomodoro') && (
+        {(mode === 'dashboard' || mode === 'daily' || mode === 'sync' || mode === 'calendar') && (
           <div className="flex w-full h-full animate-fadeIn">
             
             {/* 左側：生テキストエディタ（Syncモード時のみ表示） */}
