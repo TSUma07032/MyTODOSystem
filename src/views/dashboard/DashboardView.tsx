@@ -1,78 +1,77 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
-import { TaskRow } from '@/features/tasks/components/TaskRow';
-import { useTasks } from '@/features/tasks/store/useTasks';
-import { getTaskIndent } from '@/features/tasks/logic/taskHierarchy';
+import { useTasks } from '../../features/tasks/hooks/useTasks';
+import { TaskRow } from '../../features/tasks/components/TaskRow';
+import { getSortedTasks, isTaskVisible, getTaskIndent } from '../../features/tasks/logic/taskLogic';
+import { usePomodoroQueue } from '../../features/pomodoro/hooks/usePomodoroQueue';
 
-export const DashboardView: React.FC = () => {
-  // 🚀 Storeからタスクと追加関数を直接取得！
-  const { tasks, addTask } = useTasks();
-  
-  const [newTaskText, setNewTaskText] = useState("");
+export const DashboardView = ({ readFile, writeFile, isReady }: any) => {
+  // 全ての操作関数を取得
+  const { 
+    tasks, 
+    addTask, 
+    toggleTask, 
+    updateTaskText, 
+    deleteTask, 
+    updateDeadline, 
+    moveTask 
+  } = useTasks(readFile, writeFile, isReady);
+
+  // ポモドーロキューへの追加機能（任意で追加）
+  const { addToQueue } = usePomodoroQueue(null);
+
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const isTaskVisible = (task: any) => {
-    if (!task.parentId) return true;
-    let currentParentId: string | null = task.parentId;
-    while (currentParentId) {
-      if (!expandedIds.has(currentParentId)) return false;
-      const parent = tasks.find(t => t.id === currentParentId);
-      currentParentId = parent?.parentId || null;
-    }
-    return true;
-  };
+  const [newTaskText, setNewTaskText] = useState("");
 
   const handleAddNewTask = () => {
     if (!newTaskText.trim()) return;
-    addTask({
-      id: `task-${Date.now()}`,
-      text: newTaskText.trim(),
-      status: 'todo',
-      parentId: null,
-      order: Date.now(),
-      difficulty: 2,
-    });
+    addTask(newTaskText);
     setNewTaskText("");
   };
 
   return (
-    <div className="animate-fadeIn space-y-2 pb-10 max-w-4xl mx-auto mt-8 px-4">
+    <div className="max-w-4xl mx-auto p-8 overflow-y-auto h-full pb-32">
+      <h1 className="text-3xl font-black mb-8 text-slate-800 tracking-tight">Missions</h1>
       
-      <div className="mb-6 flex items-center gap-3 p-3 bg-white/50 rounded-xl border border-dashed border-gray-300 focus-within:bg-white focus-within:border-orange-300 focus-within:shadow-sm transition-all">
-        <Plus className="w-5 h-5 text-gray-400" />
-        <input 
-          type="text" 
-          value={newTaskText} 
-          onChange={(e) => setNewTaskText(e.target.value)} 
-          onKeyDown={(e) => e.key === 'Enter' && handleAddNewTask()} 
-          placeholder="Add a new mission..." 
-          className="flex-1 bg-transparent outline-none text-sm text-slate-700 placeholder-slate-400" 
-        />
-      </div>
-
-      {tasks
-        .filter(t => t.routineType !== 'daily' && isTaskVisible(t)) 
-        .map((task) => {
-          const hasChildren = tasks.some(child => child.parentId === task.id);
-          return (
+      <div className="space-y-1">
+        {getSortedTasks(tasks)
+          .filter(t => isTaskVisible(t, tasks, expandedIds))
+          .map(task => (
             <TaskRow 
               key={task.id} 
               task={task} 
               indent={getTaskIndent(task.id, tasks)}
-              hasChildren={hasChildren}
+              hasChildren={tasks.some(c => c.parentId === task.id)}
               isExpanded={expandedIds.has(task.id)}
-              onToggleExpand={() => toggleExpand(task.id)}
+              onToggleExpand={() => setExpandedIds(prev => {
+                const next = new Set(prev);
+                next.has(task.id) ? next.delete(task.id) : next.add(task.id);
+                return next;
+              })}
+              // ここですべての必須関数を渡す
+              onToggle={toggleTask}
+              onUpdateText={updateTaskText}
+              onDeleteTask={deleteTask}
+              onAddSubTask={addTask}
+              onUpdateDeadline={updateDeadline}
+              onMoveTask={moveTask}
+              onAddToQueue={addToQueue} // Pomodoro連携
             />
-          );
-        })}
+          ))}
+      </div>
+
+      {/* フッター追加入力 */}
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-full max-w-xl px-4">
+        <div className="flex items-center gap-3 p-4 bg-white/80 backdrop-blur shadow-xl rounded-2xl border border-orange-100">
+          <input 
+            type="text" 
+            value={newTaskText} 
+            onChange={(e) => setNewTaskText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddNewTask()}
+            placeholder="新しいタスク..." 
+            className="flex-1 bg-transparent outline-none text-sm font-bold" 
+          />
+        </div>
+      </div>
     </div>
   );
 };

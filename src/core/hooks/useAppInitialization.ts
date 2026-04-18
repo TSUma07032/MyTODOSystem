@@ -1,50 +1,34 @@
-// src/core/hooks/useAppInitialization.ts
-
 import { useEffect, useState } from 'react';
 import { useFileSystem } from './useFileSystem';
-// ※ここにタスク生成ロジックは書かない！
+import { useTasks } from '@/features/tasks/store/useTasks'; 
+import { useRoutines } from '@/features/routines/store/useRoutines'; 
 
-export const useAppInitialization = (/* 各種セッター */) => {
-  const { isReady, readFile, writeFile } = useFileSystem();
+export const useAppInitialization = () => {
+  const { isReady, readFile } = useFileSystem();
   const [isInitialized, setIsInitialized] = useState(false);
+  const { initTasks } = useTasks();      // Storeから初期化関数を取得
+  const { initRoutines } = useRoutines();
 
   useEffect(() => {
     const bootstrapApp = async () => {
       if (!isReady) return;
-
       try {
-        // 1. ひたすら読み込む（I/O処理に専念）
-        const [todoStr, infraStr, gameStr, routineStr] = await Promise.all([
+        // 🚨 修正：読み込むファイルの数と変数の数を合わせる
+        const [todoStr, routineStr] = await Promise.all([
           readFile('current_active_todo.json'),
           readFile('routines.json')
         ]);
 
-        // 2. パースして各FeatureのStoreに渡す
-        if (infraStr) initInfrastructure(JSON.parse(infraStr));
-        if (gameStr) initGamification(JSON.parse(gameStr));
-        
-        let routines = routineStr ? JSON.parse(routineStr) : [];
-        initRoutines(routines);
+        if (todoStr) initTasks(JSON.parse(todoStr));
+        if (routineStr) initRoutines(JSON.parse(routineStr));
 
-        let tasks = todoStr ? JSON.parse(todoStr) : [];
-        
-        // 🚨 修正ポイント：ルーチンからタスクを生成するロジックは、
-        // features/routines/logic/routineGenerator.ts のような外部関数に任せる！
-        // tasks = generateTodayRoutineTasks(tasks, routines); 
-        // await writeFile('current_active_todo.json', JSON.stringify(tasks));
-
-        setTasks(tasks);
-
-        // 完了
         setIsInitialized(true);
-
       } catch (error) {
         console.error("初期化エラー:", error);
       }
     };
-
     bootstrapApp();
-  }, [isReady]);
+  }, [isReady, readFile, initTasks, initRoutines]);
 
   return { isInitialized };
 };
