@@ -1,7 +1,7 @@
 import React from 'react';
 import { Repeat, CheckCircle } from 'lucide-react';
 import { useRoutines } from '@/features/routines/store/useRoutines';
-import { useDailyStore } from '../store/useDailyStore';
+import { useDailyStore } from '../../features/daily/store/useDailyStore';
 
 export const DailyView: React.FC = () => {
   const { routines } = useRoutines();
