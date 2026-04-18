@@ -68,52 +68,6 @@ export interface DailyProgress {
   completedDailyIds: string[];
 }
 
-// ==========================================
-// 3. ゲーミフィケーション（ショップ）関連の型
-// ==========================================
-
-export interface ShopItem {
-  id: string;
-  name: string;
-  cost: number;
-  icon: string;
-  description?: string;
-}
-
-export interface GamificationData {
-  coins: number;
-  shopItems: ShopItem[];
-}
-
-// ==========================================
-// 4. インフラ（放置ゲーム要素）関連の型
-// ==========================================
-
-export type ModuleStatus = 'on' | 'off';
-
-export interface InfrastructureModule {
-  id: string;
-  name: string;
-  level: number;       // 現在のレベル (1〜10)
-  rank: number;        // 転生回数（星の数）
-  status: ModuleStatus;
-  
-  // 基礎性能（レベル1・ランク0の時の値）
-  baseIncome: number;      // 1日あたりのコイン生成量
-  baseMultiplier: number;  // タスク完了時のボーナス倍率 (例: 0.1 なら +10%)
-  baseMaintenance: number; // 1日あたりの維持費
-  
-  // 個性（生成時のレアリティや属性を表現。UIの装飾などに使う）
-  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
-  color: string; // Tailwindのテキストカラークラス等
-
-  // 動的に変動する性能
-  currentIncomeMultiplier?: number;      // 1.0 〜 2.0 倍
-  currentMaintenanceMultiplier?: number; // 1.0~5.0 倍
-  
-  lastProcessedAt?: string; // "yyyy-MM-dd" (追加したプロパティ)
-}
-
 // カレンダー用の表示アイテム（CalendarViewで使われる）
 export interface CalendarDayItem {
   date: Date;

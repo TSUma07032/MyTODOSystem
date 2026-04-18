@@ -57,5 +57,16 @@ export const usePomodoroQueue = (
     return nextTask;
   }, [setQueue]);
 
-  return { queue, addToQueue, removeFromQueue, popNextTask };
+  // 6. アクション（並び替えを追加！）
+  const reorderQueue = useCallback((startIndex: number, endIndex: number) => {
+    setQueue(prev => {
+      const result = Array.from(prev);
+      const [removed] = result.splice(startIndex, 1);
+      result.splice(endIndex, 0, removed);
+      return result;
+    });
+  }, [setQueue]);
+
+  // ★ 戻り値に reorderQueue を追加
+  return { queue, addToQueue, removeFromQueue, popNextTask, reorderQueue };
 };
