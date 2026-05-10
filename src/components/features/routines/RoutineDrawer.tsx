@@ -1,35 +1,28 @@
 // src/components/features/routines/RoutineDrawer.tsx
 import React from 'react';
-import { Repeat, Plus, Trash2, CheckCircle } from 'lucide-react';
+import { Repeat, Plus, Trash2, CheckCircle, Circle } from 'lucide-react';
 import { Drawer } from '../../ui/Drawer';
 import { IconButton } from '../../ui/IconButton';
-import type { Routine, Task } from '../../../types';
+import { useAppContext } from '../../../hooks/AppContext';
 
 interface RoutineDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  routines: Routine[];
-  tasks: Task[]; // ルーチンが今日完了しているか判定するために使用
-  drawerRoutineType: 'daily' | 'weekly';
-  setDrawerRoutineType: (val: 'daily' | 'weekly') => void;
-  drawerRoutineText: string;
-  setDrawerRoutineText: (val: string) => void;
-  drawerGenerateOn: string;
-  setDrawerGenerateOn: (val: string) => void;
-  drawerDeadline: string;
-  setDrawerDeadline: (val: string) => void;
-  handleAddRoutineFromDrawer: () => void;
-  deleteRoutineJSON: (id: string) => void;
 }
 
 export const RoutineDrawer: React.FC<RoutineDrawerProps> = ({
-  isOpen, onClose, routines, tasks,
-  drawerRoutineType, setDrawerRoutineType,
-  drawerRoutineText, setDrawerRoutineText,
-  drawerGenerateOn, setDrawerGenerateOn,
-  drawerDeadline, setDrawerDeadline,
-  handleAddRoutineFromDrawer, deleteRoutineJSON
+  isOpen, onClose
 }) => {
+  const { routines, controllerProps } = useAppContext();
+  const {
+    drawerRoutineType, setDrawerRoutineType,
+    drawerRoutineText, setDrawerRoutineText,
+    drawerGenerateOn, setDrawerGenerateOn,
+    drawerDeadline, setDrawerDeadline,
+    handleAddRoutineFromDrawer, deleteRoutineJSON,
+    completedDailyIds, onToggleDaily
+  } = controllerProps;
+
   return (
     <Drawer 
       isOpen={isOpen} 
@@ -116,13 +109,18 @@ export const RoutineDrawer: React.FC<RoutineDrawerProps> = ({
             
             <div className="space-y-1">
               {sectionRoutines.map(r => {
-                const isCompletedToday = tasks.some(activeTask => activeTask.routineId === r.id && activeTask.status === 'done');
+                // TODOリストではなく、ルーチン独自の完了状態を参照する
+                const isCompletedToday = completedDailyIds.includes(r.id);
                 
                 return (
-                  <div key={r.id} className={`group flex flex-col p-2 rounded-lg transition-colors border ${isCompletedToday ? "bg-green-50/50 border-green-100" : "bg-white border-transparent hover:bg-indigo-50/50 hover:border-indigo-100 shadow-sm"}`}>
+                  <div 
+                    key={r.id} 
+                    className={`group flex flex-col p-2 rounded-lg transition-colors border cursor-pointer ${isCompletedToday ? "bg-green-50/50 border-green-100" : "bg-white border-transparent hover:bg-indigo-50/50 hover:border-indigo-100 shadow-sm"}`}
+                    onClick={() => onToggleDaily(r.id)} // クリックでチェックの付け外し
+                  >
                     <div className="flex items-center justify-between">
                       <span className={`text-sm truncate pr-2 flex items-center flex-1 ${isCompletedToday ? "text-slate-400 line-through" : "text-slate-700 font-medium"}`}>
-                        {isCompletedToday && <CheckCircle className="w-3.5 h-3.5 mr-2 text-green-500 flex-shrink-0" />}
+                        {isCompletedToday ? <CheckCircle className="w-4 h-4 mr-2 text-green-500 flex-shrink-0" /> : <Circle className="w-4 h-4 mr-2 text-slate-300 flex-shrink-0" />}
                         <span className="truncate" title={r.text}>{r.text}</span>
                       </span>
                       {/* ここで共通のIconButtonを使用！ */}
