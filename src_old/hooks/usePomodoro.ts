@@ -5,9 +5,12 @@ import type { PomodoroMode } from '../types';
 const WORK_TIME = 25 * 60;    
 const BREAK_TIME = 10 * 60;   
 const FREEZE_TIME = 40 * 60;  
+const PENALTY_COINS = 100;    
 const MAX_FREEZE = 3;         
 
 export const usePomodoro = (
+  removeCoins: (amount: number) => Promise<void>,
+  addCoins: (amount: number) => Promise<void>,
   onAddWorkTime: (taskId: string, minutes: number) => Promise<void>,
   showToast: (msg: string, difficulty: number) => void
 ) => {
@@ -130,7 +133,8 @@ export const usePomodoro = (
     } else if (mode === 'freeze') {
       setMode('idle');
       setTaskId(null);
-      showToast(`🚨 凍結時間を経過したため、タイマーをリセットしました`, 5);
+      await removeCoins(PENALTY_COINS);
+      showToast(`🚨 凍結時間オーバー！ペナルティ -${PENALTY_COINS}🪙`, 5);
     }
   };
 
@@ -147,8 +151,9 @@ export const usePomodoro = (
     setIsConfirming(false);
     setMode('break');
     setRemainingTime(BREAK_TIME);
+    await addCoins(50);
     if (taskId) await onAddWorkTime(taskId, 25);
-    showToast("🎉 25分達成！10分休憩に入ります", 1);
+    showToast("🎉 25分達成！ 50🪙獲得＆10分休憩に入ります", 1);
   };
 
   const confirmExtend = async () => {
@@ -167,17 +172,19 @@ export const usePomodoro = (
     setMode('work');
     setRemainingTime(WORK_TIME);
     setIsConfirming(false); 
-    showToast("集中モード開始！", 3);
+    showToast("集中モード開始！離脱するとペナルティです", 3);
   };
 
   const stopEarly = async () => {
+    await removeCoins(PENALTY_COINS);
     resetToIdle();
-    showToast(`🚨 集中モードを中断しました`, 5);
+    showToast(`🚨 早期離脱ペナルティ: -${PENALTY_COINS}🪙`, 5);
   };
 
   const completeTaskEarly = async () => {
     const minutesWorked = Math.ceil((WORK_TIME - remainingTime) / 60);
     if (taskId) await onAddWorkTime(taskId, minutesWorked);
+    await addCoins(50); 
     setMode('break');
     setRemainingTime(BREAK_TIME);
     showToast(`タスク完了！ (${minutesWorked}分) 10分休憩に入ります`, 1);
@@ -200,7 +207,7 @@ export const usePomodoro = (
       const newCount = freezeCount + 1;
       setFreezeCount(newCount);
       localStorage.setItem('freezeCount', newCount.toString());
-      showToast(`一時凍結 (${newCount}/${MAX_FREEZE})。40分以内に戻ってください`, 2);
+      showToast(`一時凍結 (${newCount}/${MAX_FREEZE})。40分以内に戻らないとペナルティです`, 2);
     }
   };
 

@@ -3,7 +3,7 @@ import React, {useState} from 'react';
 import { Plus } from 'lucide-react';
 import { TaskRow } from '../TaskRow';
 import type { Task } from '../../types';
-import { getTaskIndent } from '../../utils/taskLogic';
+import { getTaskIndent } from '../../logic/taskLogic';
 
 interface DashboardViewProps {
   tasks: Task[];

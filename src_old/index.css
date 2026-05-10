@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* --- ここから魔法のアニメーション --- */
+
+/* 背景がゆっくり呼吸するように動くアニメーション */
+@keyframes gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-flow {
+  background-size: 400% 400%;
+  animation: gradient-flow 15s ease infinite;
+}
+
+/* 完了タスクが消える儀式のアニメーション（よりリッチに！） */
+@keyframes holy-vanish {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    box-shadow: 0 0 0 rgba(0,0,0,0);
+  }
+  30% {
+    /* 一瞬膨らんで光る */
+    transform: scale(1.05);
+    background-color: #fffbeb; /* 薄い黄色 */
+    box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.5), 0 8px 10px -6px rgba(245, 158, 11, 0.1);
+    border-color: #fcd34d;
+  }
+  100% {
+    /* シュッと上に消える */
+    transform: scale(0.9) translateY(-50px);
+    opacity: 0;
+    height: 0px; /* 高さを0にして詰める */
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+.animate-vanish {
+  /* overflow-hiddenが重要。消える時に隣の要素に影響させない */
+  overflow: hidden;
+  animation: holy-vanish 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: center top;
+}
+
+/* 画面遷移のフェードイン */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* 全体のトランジションを滑らかに */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}

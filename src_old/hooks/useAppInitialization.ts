@@ -1,7 +1,7 @@
 // src/hooks/useAppInitialization.ts
 import { useEffect } from 'react';
 import { format } from 'date-fns'; 
-import type { Routine, DailyProgress, Task } from '../types';
+import type { Routine, DailyProgress, GamificationData, InfrastructureModule, Task } from '../types';
 import { parseMarkdown } from '../utils/parser';
 import { migrateMarkdownToJson } from '../utils/migrator';
 
@@ -11,7 +11,9 @@ interface InitializationProps {
   readFile: (filename: string) => Promise<string | null>;
   writeFile: (filename: string, content: string) => Promise<void>;
   initDailyProgress: (data: DailyProgress, allRoutines: Routine[]) => number;
+  initGamification: (data: GamificationData) => void;
   initRoutines: (data: Routine[]) => void;
+  initInfrastructure: (modules: InfrastructureModule[], debt: number) => void;
   setTasks: (tasks: Task[]) => void;
   setEvents: (events: any[]) => void;
   setHistoryItems: (items: any[]) => void; 
@@ -21,7 +23,7 @@ interface InitializationProps {
 
 export const useAppInitialization = ({
   mode, isReady, readFile, writeFile,
-  initDailyProgress, initRoutines,
+  initDailyProgress, initGamification, initRoutines, initInfrastructure,
   setTasks, setEvents, setHistoryItems, 
   routines, onPenalty
 }: InitializationProps) => {
@@ -72,6 +74,18 @@ export const useAppInitialization = ({
           loadedTasks = migrateMarkdownToJson(parsed as any);
           await writeFile('current_active_todo.json', JSON.stringify(loadedTasks, null, 2));
         }
+
+        // --- インフラ・ゲーミフィケーションの読み込み ---
+        try {
+          const infraContent = await readFile('infrastructure.json');
+          if (infraContent) {
+            const parsed = JSON.parse(infraContent);
+            initInfrastructure(parsed.modules || [], parsed.debt || 0);
+          }
+        } catch (e) { /* fresh start */ }
+        
+        let gameJson = await readFile('gamification.json');
+        if (gameJson) initGamification(JSON.parse(gameJson));
 
         // --- ルーチンの読み込みと、新時代(JSON)のタスク自動追加 ---
         const todayStr = format(new Date(), 'yyyy-MM-dd');

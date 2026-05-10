@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Repeat, FolderOpen,
+  Coins, Repeat, FolderOpen, Server,
   Sun, Moon, CalendarDays, History as HistoryIcon, CheckSquare,
   Copy, CheckCircle, Sparkles, ArrowRight, Timer
 } from 'lucide-react';
@@ -11,8 +11,11 @@ interface HeaderProps {
   setMode: (mode: 'dashboard' | 'daily' | 'sync' | 'history' | 'calendar' | 'pomodoro') => void;
   themeIcon: React.ElementType;
   themeAccent: string;
+  coins: number;
   isReady: boolean;
+  onOpenShop: () => void;
   onOpenRoutines: () => void;
+  onOpenInfrastructure: () => void;
   onConnectFolder: () => void;
   onCopy?: () => void;
   copied?: boolean;
@@ -26,8 +29,11 @@ export const Header: React.FC<HeaderProps> = ({
   setMode,
   themeIcon: CurrentIcon,
   themeAccent,
+  coins,
   isReady,
+  onOpenShop,
   onOpenRoutines,
+  onOpenInfrastructure,
   onConnectFolder,
   onCopy,
   copied,
@@ -94,6 +100,26 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* 🕹️ 中央：各種機能へのアクセス（変更なし） */}
       <div className="flex-1 flex flex-col gap-5 items-center w-full mt-4">
+        {/* Shop */}
+        <button onClick={onOpenShop} className="group relative flex flex-col items-center gap-1 w-full hover:bg-black/5 py-2 rounded-2xl transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-100 to-amber-100 flex items-center justify-center border border-yellow-200 shadow-sm group-hover:scale-110 group-active:scale-95 transition-all">
+            <Coins className="w-6 h-6 fill-yellow-500 text-yellow-600" />
+          </div>
+          <span className={`text-[10px] font-black tracking-tight ${isSync ? "text-yellow-400" : "text-yellow-600"}`}>
+            {coins > 999 ? '999+' : coins}
+          </span>
+          <span className="absolute left-20 px-3 py-1.5 bg-slate-800 text-white font-bold text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap shadow-xl z-50">Shop ({coins.toLocaleString()} 🪙)</span>
+        </button>
+
+        {/* Infrastructure */}
+        <button onClick={onOpenInfrastructure} className="group relative flex flex-col items-center gap-1 w-full hover:bg-black/5 py-2 rounded-2xl transition-all">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-100 to-blue-100 flex items-center justify-center border border-cyan-200 shadow-sm group-hover:scale-110 group-active:scale-95 transition-all">
+            <Server className="w-6 h-6 text-cyan-600" />
+          </div>
+          <span className={`text-[10px] font-bold ${isSync ? "text-cyan-400" : "text-cyan-700"}`}>Core</span>
+          <span className="absolute left-20 px-3 py-1.5 bg-slate-800 text-white font-bold text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap shadow-xl z-50">Infrastructure</span>
+        </button>
+
         {/* Routines */}
         <button onClick={onOpenRoutines} className="group relative flex flex-col items-center gap-1 w-full hover:bg-black/5 py-2 rounded-2xl transition-all">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center border border-indigo-200 shadow-sm group-hover:scale-110 group-active:scale-95 transition-all">

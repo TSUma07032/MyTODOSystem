@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 // Hooks
 import { useFileSystem } from './hooks/useFileSystem';
 import { useTasks } from './hooks/useTasks';
+import { useGamification } from './hooks/useGamification';
 import { useRoutines } from './hooks/useRoutines';
 import { useEvents } from './hooks/useEvents';
 import { usePomodoro } from './hooks/usePomodoro';
@@ -18,11 +19,14 @@ import { HistoryView } from './components/views/HistoryView';
 import { PomodoroView } from './components/views/PomodoroView';
 
 // Components (Features & UI)
+import { ShopDrawer } from './components/features/shops/ShopDrawer';
 import { RoutineDrawer } from './components/features/routines/RoutineDrawer';
 import { Toast } from './components/ui/Toast';
 
 // Custom Hooks
 import { useAppInitialization } from './hooks/useAppInitialization';
+import { useInfrastructure } from './hooks/useInfrastructure';
+import { InfrastructureDrawer } from './components/features/infrastructure/InfrastructureDrawer';
 
 // View用の導出ロジックをまとめたカスタムフック
 import { useAppViewData } from './hooks/useAppViewData';
@@ -53,6 +57,9 @@ function App() {
   // ダッシュボード用の新規タスク入力状態
   const [newTaskText, setNewTaskText] = useState("");
 
+  // ドロワーの開閉ステートを追加
+  const [isInfrastructureDrawerOpen, setIsInfrastructureDrawerOpen] = useState(false);
+
   const [pomodoroQueue, setPomodoroQueue] = useState<string[]>(() => {
   // 初回レンダリング時に localStorage から保存されたキューを復元
   const savedQueue = localStorage.getItem('pomodoroQueue');
@@ -76,6 +83,18 @@ useEffect(() => {
     updateDeadline, updateTaskText, deleteTask, addSubTask, moveTask, addNewTask, updateTasksAndSave,
     addWorkTime, setWorkTime
   } = useTasks(writeFile);
+
+  const {
+    gamification, initGamification,
+    isShopDrawerOpen, setIsShopDrawerOpen, isShopEditMode, setIsShopEditMode,
+    editingItemId, setEditingItemId, editItemData, setEditItemData, newItemData, setNewItemData,
+    handleAddShopItem, handleDeleteShopItem, handleUpdateShopItem, startEditing,
+    calculateTaskCoins, addCoins, removeCoins
+  } = useGamification(writeFile);
+
+  const { 
+    modules, debt, initInfrastructure, mineModule, toggleModuleStatus, processSettlement, upgradeModule, resonateModule, repayDebt, sellModule
+  } = useInfrastructure(gamification.coins, addCoins, removeCoins, writeFile);
 
   
   
@@ -125,20 +144,85 @@ useEffect(() => {
   };
 
   const pomodoro = usePomodoro(
+    removeCoins, 
+    addCoins, 
     addWorkTime, 
     showToast
   );
 
   const handleToggleTaskApp = async (taskId: string) => {
     const result = await toggleTaskStatus(taskId);
-    if (result) {
-      showToast(result.isCurrentlyTodo ? "タスクを完了しました！" : "タスクを未完了に戻しました", 1);
+    if (!result) return;
+    const { isCurrentlyTodo, toggledTasks } = result;
+
+    let earnedCoins = 0;
+    let maxDifficulty = 0;
+    toggledTasks.forEach(t => {
+      earnedCoins += calculateTaskCoins(t); // taskLogicからの戻り値（マイナスも有り得る）
+      if (t.difficulty > maxDifficulty) maxDifficulty = t.difficulty;
+    });
+
+    const activeModules = modules.filter(m => m.status === 'on');
+    const totalMultiplier = activeModules.reduce((sum, m) => 
+      sum + (m.baseMultiplier * m.level * (1 + m.rank * 0.2)), 0
+    );
+    
+    // 🛡️ バフ込みの最終獲得予定コイン（ペナルティのマイナス値にはバフを掛けない安全設計！）
+    const finalCoins = earnedCoins >= 0 
+      ? Math.floor(earnedCoins * (1 + totalMultiplier)) 
+      : earnedCoins; 
+
+    if (isCurrentlyTodo) {
+      if (finalCoins >= 0) {
+        // 🟢 通常クリア or 早期クリアボーナスの処理
+        let actualCoinsToAdd = finalCoins;
+        let deductedForDebt = 0;
+
+        if (debt > 0) {
+          deductedForDebt = Math.min(Math.ceil(finalCoins * 0.5), debt);
+          actualCoinsToAdd = finalCoins - deductedForDebt;
+          await repayDebt(deductedForDebt);
+        }
+
+        if (actualCoinsToAdd > 0) {
+          await addCoins(actualCoinsToAdd);
+        }
+
+        let toastMsg = `+${actualCoinsToAdd} 🪙`;
+        if (totalMultiplier > 0) toastMsg += ` (Boost: +${Math.floor(totalMultiplier * 100)}%)`;
+        if (deductedForDebt > 0) toastMsg += `\n💸 借金返済: -${deductedForDebt} 🪙`;
+        
+        showToast(toastMsg, maxDifficulty);
+      } else {
+        // 🔴 期限超過ペナルティの処理 (finalCoins がマイナスの場合)
+        const penaltyAmount = Math.abs(finalCoins);
+        await removeCoins(penaltyAmount);
+        showToast(`期限超過ペナルティ... -${penaltyAmount} 🪙`, 5); // 赤色(難易度5)のトーストで警告
+      }
+      
+    } else {
+      // 🔙 タスクを未完了に戻した場合（誤タップ対応）
+      if (finalCoins >= 0) {
+        await removeCoins(finalCoins);
+        showToast(`-${finalCoins} 🪙`, 1);
+      } else {
+        // ペナルティだったタスクを戻した場合は、没収分を返還する親切設計
+        const returnAmount = Math.abs(finalCoins);
+        await addCoins(returnAmount);
+        showToast(`ペナルティ返還 +${returnAmount} 🪙`, 1);
+      }
     }
   };
 
   const handleToggleDailyApp = async (routineId: string) => {
-    const { isCompleted } = await toggleDailyProgress(routineId);
-    showToast(isCompleted ? "習慣達成！" : "習慣を未完了に戻しました", 1);
+    const { isCompleted, coinDiff } = await toggleDailyProgress(routineId);
+    if (isCompleted) {
+      await addCoins(coinDiff);
+      showToast(`習慣達成! +${coinDiff} 🪙`, 1);
+    } else {
+      await removeCoins(coinDiff);
+      showToast(`-${coinDiff} 🪙`, 1);
+    }
   };
 
   const handleSyncAndSave = async () => {
@@ -216,19 +300,45 @@ useEffect(() => {
   };
 
   const handlePenalty = async (missedCount: number) => {
-    showToast(`不履行: 未達成が ${missedCount} 件あります`, 5); // 赤色(難易度5)のトーストで警告
+    const penaltyPerTask = 50; // 1つサボるごとに50コイン没収
+    const totalPenalty = missedCount * penaltyPerTask;
+    
+    await removeCoins(totalPenalty);
+    showToast(`不履行ペナルティ: -${totalPenalty} 🪙 (未達成: ${missedCount}件)`, 5); // 難易度5で赤い警告
   };
 
 
   // 4. 初期データの読み込み (useEffect群)
   useAppInitialization({
     mode, isReady, readFile, writeFile,
-    initDailyProgress, initRoutines,
+    initDailyProgress, initGamification, initRoutines, initInfrastructure,
     setTasks, 
     setEvents,
     setHistoryItems, 
     routines, onPenalty: handlePenalty
   });
+
+  useEffect(() => { //後で隔離
+    const runSettlement = async () => {
+      // isReady になり、モジュールデータが存在する場合のみ実行
+      if (isReady && modules.length > 0) {
+        const result = await processSettlement(gamification.coins);
+        
+        if (result) {
+          // 清算が発生した場合、結果をトーストで通知
+          const sign = result.netDifference > 0 ? "+" : "";
+          const msg = `[${result.daysPassed}日分の清算] 収益:${Math.floor(result.totalIncome)} 維持費:-${Math.floor(result.totalMaintenance)} (収支: ${sign}${result.netDifference} 🪙)`;
+          
+          showToast(msg, result.netDifference < 0 ? 5 : 1);
+          
+          if (result.newDebt > debt) {
+            setTimeout(() => showToast(`⚠️ 資金ショート！借金が ${result.newDebt.toLocaleString()} 🪙 に膨れ上がりました！`, 5), 3500);
+          }
+        }
+      }
+    };
+    runSettlement();
+  }, [isReady, modules.length]); // 初回ロード後に発火
 
   // 5. 導出ステート (useMemo群)
   const { groupedHistory, calendarDays, themeConfig } = useAppViewData({
@@ -250,8 +360,11 @@ useEffect(() => {
         setMode={setMode} 
         themeIcon={themeConfig.icon} 
         themeAccent={themeConfig.accent} 
+        coins={gamification.coins} 
         isReady={isReady} 
+        onOpenShop={() => setIsShopDrawerOpen(true)} 
         onOpenRoutines={() => setIsRoutineDrawerOpen(true)} 
+        onOpenInfrastructure={() => setIsInfrastructureDrawerOpen(true)}
         onConnectFolder={!dirHandle ? pickDirectory : verifyPermission} 
         onCopy={handleCopy} 
         copied={copied} 
@@ -369,6 +482,17 @@ useEffect(() => {
         )}
       </div>
 
+      {/* 各種ドロワー */}
+      <ShopDrawer 
+        isOpen={isShopDrawerOpen} onClose={() => setIsShopDrawerOpen(false)} 
+        gamification={gamification} isShopEditMode={isShopEditMode} setIsShopEditMode={setIsShopEditMode} 
+        editingItemId={editingItemId} setEditingItemId={setEditingItemId} 
+        editItemData={editItemData} setEditItemData={setEditItemData} 
+        newItemData={newItemData} setNewItemData={setNewItemData} 
+        handleAddShopItem={handleAddShopItem} handleDeleteShopItem={handleDeleteShopItem} 
+        handleUpdateShopItem={handleUpdateShopItem} startEditing={startEditing} removeCoins={removeCoins} 
+      />
+      
       <RoutineDrawer 
         isOpen={isRoutineDrawerOpen} onClose={() => setIsRoutineDrawerOpen(false)} 
         routines={routines} tasks={tasks} drawerRoutineType={drawerRoutineType} 
@@ -377,6 +501,42 @@ useEffect(() => {
         setDrawerGenerateOn={setDrawerGenerateOn} drawerDeadline={drawerDeadline} 
         setDrawerDeadline={setDrawerDeadline} handleAddRoutineFromDrawer={handleAddRoutineFromDrawer} 
         deleteRoutineJSON={deleteRoutineJSON} 
+      />
+
+      <InfrastructureDrawer 
+        isOpen={isInfrastructureDrawerOpen}
+        onClose={() => setIsInfrastructureDrawerOpen(false)}
+        modules={modules}
+        debt={debt}
+        coins={gamification.coins}
+        onMine={async () => {
+          const newMod = await mineModule();
+          if (newMod) {
+             // マイニング成功時にトースト通知を出すと気持ちいいです
+             showToast(`[${newMod.rarity}] ${newMod.name} を発掘しました！`, newMod.rarity === 'Legendary' ? 5 : 2);
+          }
+        }}
+        onToggleStatus={toggleModuleStatus}
+        // レベルアップ処理を繋ぐ
+        onUpgrade={async (id, currentCoins) => {
+          const success = await upgradeModule(id, currentCoins);
+          if (success) showToast("モジュールをアップグレードしました！", 2);
+          return success;
+        }}
+        onResonate={async (id) => {
+          const childName = await resonateModule(id);
+          if (childName) {
+            showToast(`共鳴成功！新たなモジュール「${childName}」が誕生しました！`, 5);
+          }
+          return childName;
+        }}
+        onSell={async (id) => {
+          const price = await sellModule(id);
+          if (price !== false) {
+            showToast(`不要なモジュールを ${price} 🪙 でスクラップ業者に売却しました。`, 2);
+          }
+          return price;
+        }}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 // src/utils/markdownSync.ts
 import type { Task } from '../types';
-import { getTaskIndent } from '../utils/taskLogic';
+import { getTaskIndent } from '../logic/taskLogic';
 
 export const tasksToMarkdown = (tasks: Task[]): string => {
   // 念のため order（表示順）でソート

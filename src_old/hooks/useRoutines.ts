@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import type { Routine, DailyProgress } from '../types';
-import { isRoutineActiveToday } from '../utils/dateUtils'; // calculateRoutineDeadlineTag はもう不要なので消しました
+import { isRoutineActiveToday } from '../logic/dateUtils'; // calculateRoutineDeadlineTag はもう不要なので消しました
 
 export const useRoutines = (
   writeFile: (filename: string, content: string) => Promise<void>,

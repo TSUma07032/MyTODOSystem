@@ -1,0 +1,13 @@
+src/
+├── components/
+│   ├── ui/          # アプリケーションに依存しない汎用部品 (Toast, Button)
+│   ├── layout/      # 画面の枠組み (Header, Sidebar)
+│   ├── views/       # App.tsxから直接呼ばれる各モードの画面 (DashboardView等)
+│   └── features/    # ドメインごとのコンポーネント (routines, pomodoro)
+├── hooks/           # カスタムフック (ビジネスロジック、状態管理)
+├── services/        # ファイルシステムなど、外部との通信層
+├── utils/           # 状態を持たない純粋関数 (日付計算、Markdownパース)
+├── types/           # アプリケーション全体の共通型定義
+├── constants/       # マジックナンバーや固定文字列の定義
+├── logic/           # 単純な計算の隔離
+└── App.tsx          # メインルーティングとプロバイダーの設定
