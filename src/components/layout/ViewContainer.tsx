@@ -5,7 +5,6 @@ import { DailyView } from '../views/DailyView';
 import { CalendarView } from '../views/CalendarView';
 import { HistoryView } from '../views/HistoryView';
 import { PomodoroView } from '../views/PomodoroView';
-import type { Task } from '../../types';
 
 export const ViewContainer: React.FC = () => {
   const {
@@ -31,31 +30,22 @@ export const ViewContainer: React.FC = () => {
     groupedHistory, viewingLog, calendarDays,
     rawMarkdown, setRawMarkdown,
     completedDailyIds,
-    updateTasksAndSave,
-  } = controllerProps;
+    addCoins,
+  } = controllerProps as any;
 
   if (mode === 'pomodoro') {
     return (
       <PomodoroView
         pomodoro={pomodoro}
         tasks={tasks}
-        onToggleTask={onToggleTask}
+        routines={routines}
+        onToggleDaily={onToggleDaily}
         queue={pomodoroQueue}
         onAddToQueue={onAddToQueue}
         onRemoveFromQueue={onRemoveFromQueue}
         onUpdateWorkTime={onUpdateWorkTime}
-        onAddTemplate={async (templateName, subTasks) => {
-          const parentId = `task-${Date.now()}`;
-          const parentTask: Task = {
-            id: parentId, text: templateName, status: 'todo',
-            parentId: null, order: tasks.length, difficulty: 2
-          };
-          const newChildTasks: Task[] = subTasks.map((text, i) => ({
-            id: `task-${Date.now() + i + 1}`, text, status: 'todo',
-            parentId: parentId, order: i, difficulty: 1
-          }));
-          await updateTasksAndSave([...tasks, parentTask, ...newChildTasks]);
-          onAddToQueue(parentId);
+        addCoins={addCoins}
+        onAddTemplate={async (_templateName, _subTasks) => {
         }}
       />
     );

@@ -1,15 +1,16 @@
+
 import { Header } from './Header';
 import { ViewContainer } from './ViewContainer';
 import { RoutineDrawer } from '../features/routines/RoutineDrawer';
 import { Toast } from '../ui/Toast';
-import { useAppContext } from '../../hooks/AppContext';
+import { useAppContext } from '../../hooks/AppContext'; // 追加
 
 export const AppLayout = () => {
   const {
     mode, setMode, isSyncing, copied, toast, themeConfig, isReady, dirHandle,
-    pomodoro, routines, isRoutineDrawerOpen,
+    pomodoro, isRoutineDrawerOpen,
     setIsRoutineDrawerOpen, handleSyncAndSave, handleCopy, pickDirectory, verifyPermission
-  } = useAppContext();
+  } = useAppContext(); // 修正
 
   return (
     <div className={`h-screen flex font-sans transition-all duration-700 animate-gradient-flow ${themeConfig.bg}`}>

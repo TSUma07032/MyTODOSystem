@@ -10,7 +10,7 @@ import { useAppViewData } from './useAppViewData';
 import { tasksToMarkdown } from '../utils/markdownSync';
 import { parseMarkdown } from '../utils/parser';
 import { migrateMarkdownToJson } from '../utils/migrator';
-import type { Task, Routine } from '../types';
+// import type { Task, Routine } from '../types';
 
 export const useAppController = () => {
   // 1. 基本状態

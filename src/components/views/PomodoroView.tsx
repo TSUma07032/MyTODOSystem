@@ -1,19 +1,23 @@
 // src/components/views/PomodoroView.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Square, Coffee, Snowflake, Plus, Trash2, Check, BellRing, RefreshCcw, CheckCircle, Zap, LibraryBig, ExternalLink, Minimize2, BellOff, X, Pencil, ChevronDown, ChevronRight, ListTodo } from 'lucide-react'; 
-import type { Task } from '../../types';
+import { Play, Square, Coffee, Snowflake, Plus, Trash2, Check, BellRing, RefreshCcw, CheckCircle, Zap, LibraryBig, ExternalLink, Minimize2, BellOff, X, Pencil, ChevronDown, ChevronRight, Repeat, Sparkles, Target } from 'lucide-react'; 
+import type { Task, Routine } from '../../types';
 import { useTemplates, type Template } from '../../hooks/useTemplates';
+import { invoke } from '@tauri-apps/api/core';
+import { getTaskIndent } from '../../utils/taskLogic';
 
 interface PomodoroViewProps {
   pomodoro: any;
   tasks: Task[];
-  onToggleTask: (id: string) => void;
+  routines: Routine[];
+  onToggleDaily: (id: string) => void;
   queue: string[];
   onAddToQueue: (id: string) => void;
   onRemoveFromQueue: (id: string) => void;
   onAddTemplate?: (templateName: string, subTasks: string[]) => void;
   onUpdateWorkTime?: (taskId: string, minutes: number) => void;
+  addCoins?: (amount: number) => Promise<void>; // 即席タスク完了用
 }
 
 const formatTimeBig = (seconds: number) => {
@@ -25,11 +29,13 @@ const formatTimeBig = (seconds: number) => {
   return `${sign}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+// TODO: 推定諸悪の根源
+// ここが悪さをして、小窓モードでも全窓を表示している
 // ============================================================================
 // TimerPanel コンポーネント (そのまま)
 // ============================================================================
 const TimerPanel = ({
-  isPiP, pipWindow, pomodoro, queue, allTasks, currentTask,
+  isPiP, pipWindow, pomodoro, queue, allTasks, currentTask, targetTodo,
   startNextInQueue, onToggleTask, onRemoveFromQueue
 }: any) => {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -51,7 +57,7 @@ const TimerPanel = ({
     <div 
       ref={panelRef}
       className={`w-full h-full flex flex-col items-center justify-center relative transition-colors duration-300 ${
-        isPiP ? `bg-slate-50 overflow-hidden ${isMini ? 'p-0 m-0' : 'p-2 sm:p-4'}` 
+        isPiP ? `bg-slate-900 text-white overflow-hidden ${isMini ? 'p-0 m-0' : 'p-2 sm:p-4'}` 
               : 'p-6 sm:p-10 bg-white/30 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm'
       }`}
     >
@@ -83,24 +89,32 @@ const TimerPanel = ({
       {pomodoro.mode === 'idle' ? (
         <div className="text-center flex flex-col items-center w-full justify-center h-full">
           {!isMini && <Coffee className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mb-2 sm:mb-4" />}
-          <h2 className={`${isMini ? 'text-lg' : 'text-xl'} font-bold text-gray-600 mb-1`}>準備完了</h2>
+          <h2 className={`${isMini ? 'text-lg' : 'text-xl'} font-bold ${isPiP ? 'text-white' : 'text-gray-600'} mb-1`}>準備完了</h2>
           {!isMini && <p className="text-xs sm:text-sm text-gray-500 mb-4">キューからタスクを選んで集中を開始</p>}
           {queue.length > 0 ? (
             <div className="flex flex-col items-center gap-2 sm:gap-4 w-full px-2 sm:px-4">
-              {!isMini && <div className="w-full truncate px-3 py-1.5 sm:px-4 sm:py-2 bg-orange-100 text-orange-800 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold border border-orange-200 shadow-inner">次: {allTasks.find((t: Task) => t.id === queue[0])?.text}</div>}
+              {!isMini && <div className="w-full truncate px-3 py-1.5 sm:px-4 sm:py-2 bg-orange-500/20 text-orange-400 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold border border-orange-500/30 shadow-inner">次: {allTasks.find((t: Task) => t.id === queue[0])?.text}</div>}
               <button onClick={startNextInQueue} className="w-full max-w-sm py-3 sm:py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-full font-black text-sm sm:text-lg shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 transform hover:scale-105 active:scale-95"><Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white" />{isMini ? '開始' : '集中を開始！'}</button>
             </div>
           ) : <button disabled className="px-4 py-2 sm:px-6 sm:py-3 bg-gray-200 text-gray-400 rounded-full font-bold text-xs sm:text-sm flex items-center gap-2 cursor-not-allowed">{isMini ? '空です' : 'キューにタスクがありません'}</button>}
         </div>
       ) : isMini ? (
-        <div className="relative w-full h-full flex-1 overflow-hidden">
+        <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden">
+          <div className="text-[10px] font-bold text-orange-400 truncate w-full text-center px-1 mb-1">{currentTask?.text}</div>
           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[52%] font-mono font-black tabular-nums whitespace-nowrap leading-none transition-colors duration-300 ${pomodoro.mode === 'work' ? 'text-orange-500 drop-shadow-md' : pomodoro.mode === 'break' ? (pomodoro.isBreakAlarming ? 'text-red-500 animate-pulse' : 'text-green-500') : 'text-blue-500'}`} style={{ fontSize: 'min(26vw, 80vh)' }}>{formatTimeBig(pomodoro.remainingTime)}</div>
         </div>
       ) : (
         <div className="text-center flex flex-col items-center justify-center w-full flex-1 gap-4 sm:gap-6">
-          <div className={`w-full p-2 sm:p-4 bg-white/60 rounded-xl sm:rounded-2xl shadow-sm border transition-colors ${pomodoro.isBreakAlarming ? 'border-red-400 bg-red-50' : 'border-orange-100'}`}>
+          {/* 🌟 メイン表示: タスク名をデカデカと表示 */}
+          <div className={`w-full p-4 sm:p-6 rounded-3xl shadow-lg border transition-all ${isPiP ? 'bg-white/5 border-white/10' : 'bg-white/60 border-orange-100'} ${pomodoro.isBreakAlarming ? 'border-red-400 bg-red-50' : ''}`}>
+            {targetTodo && (
+              <div className="mb-2 flex items-center justify-center gap-1.5 opacity-80">
+                <Target className="w-3 h-3 text-orange-400" />
+                <span className="text-[10px] sm:text-xs font-bold text-orange-400/90 uppercase tracking-[0.2em] truncate max-w-[80%]">Goal: {targetTodo.text}</span>
+              </div>
+            )}
             <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 block ${pomodoro.isBreakAlarming ? 'text-red-500' : 'text-orange-500'}`}>{pomodoro.mode === 'work' ? 'Now Focusing' : pomodoro.mode === 'break' ? (pomodoro.remainingTime < 0 ? 'Break Time Over!' : 'Break Time') : 'Freezed'}</span>
-            <h2 className="font-bold text-gray-800 break-words leading-tight line-clamp-2" style={{ fontSize: isPiP ? 'clamp(1rem, 4vw, 1.5rem)' : '1.5rem' }}>{pomodoro.mode === 'work' && currentTask ? currentTask.text : pomodoro.mode === 'break' && queue.length > 0 ? `Next: ${allTasks.find((t: Task) => t.id === queue[0])?.text}` : pomodoro.mode === 'freeze' ? "凍結中..." : "休憩中..."}</h2>
+            <h2 className={`font-black break-words leading-tight line-clamp-2 ${isPiP ? 'text-white' : 'text-slate-800'}`} style={{ fontSize: isPiP ? 'clamp(1.2rem, 5vw, 2rem)' : '2.5rem' }}>{pomodoro.mode === 'work' && currentTask ? currentTask.text : pomodoro.mode === 'break' && queue.length > 0 ? `Next: ${allTasks.find((t: Task) => t.id === queue[0])?.text}` : pomodoro.mode === 'freeze' ? "凍結中..." : "休憩中..."}</h2>
           </div>
           <div className={`font-mono font-black tabular-nums transition-colors duration-300 w-full flex items-center justify-center tracking-tighter ${pomodoro.mode === 'work' ? 'text-orange-500 drop-shadow-md' : pomodoro.mode === 'break' ? (pomodoro.isBreakAlarming ? 'text-red-500 animate-pulse' : 'text-green-500') : 'text-blue-500'}`} style={{ fontSize: isPiP ? 'clamp(3rem, 15vw, 6rem)' : '6rem' }}>{formatTimeBig(pomodoro.remainingTime)}</div>
           <div className="flex items-center justify-center gap-3 sm:gap-4 w-full flex-wrap">
@@ -119,24 +133,31 @@ const TimerPanel = ({
 // メインの PomodoroView
 // ============================================================================
 export const PomodoroView: React.FC<PomodoroViewProps> = ({ 
-  pomodoro, tasks, onToggleTask, queue, onAddToQueue, onRemoveFromQueue, 
-  onAddTemplate, onUpdateWorkTime 
+  pomodoro, tasks, routines, queue, onAddToQueue, onRemoveFromQueue, 
+  onAddTemplate, onUpdateWorkTime, addCoins
 }) => {
   
-  const [searchQuery, setSearchQuery] = useState("");
   const [adhocText, setAdhocText] = useState('');
   const [adhocTasks, setAdhocTasks] = useState<Task[]>(() => {
-  const saved = localStorage.getItem('pomodoroAdhocTasks');
-  return saved ? JSON.parse(saved) : [];
-});
+    const saved = localStorage.getItem('pomodoroAdhocTasks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [targetTodoId, setTargetTodoId] = useState<string | null>(() => localStorage.getItem('pomodoroTargetTodoId'));
+
+  // 小窓モード（URLハッシュが #timer）かどうかの判定
+  const isSubWindow = typeof window !== 'undefined' && window.location.hash === '#timer'; //TODO:後でここを参照にリファクタリング
+
+  const [expandedObjectiveIds, setExpandedObjectiveIds] = useState<Set<string>>(new Set());
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
 
   useEffect(() => {
-  localStorage.setItem('pomodoroAdhocTasks', JSON.stringify(adhocTasks));
-}, [adhocTasks]);
+    localStorage.setItem('pomodoroAdhocTasks', JSON.stringify(adhocTasks));
+  }, [adhocTasks]);
 
-  // ツリー展開状態の管理
-  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (targetTodoId) localStorage.setItem('pomodoroTargetTodoId', targetTodoId);
+    else localStorage.removeItem('pomodoroTargetTodoId');
+  }, [targetTodoId]);
 
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useTemplates();
   const [isAddingTemplate, setIsAddingTemplate] = useState(false);
@@ -147,8 +168,34 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
   const [editTplName, setEditTplName] = useState("");
   const [editTplTasks, setEditTplTasks] = useState("");
 
-  const allTasks = [...tasks, ...adhocTasks];
-  const currentTask = allTasks.find((t: Task) => t.id === pomodoro.taskId);
+  // セクション開閉状態
+  const [isTasksOpen, setIsTasksOpen] = useState(true);
+  const [isRoutinesOpen, setIsRoutinesOpen] = useState(true);
+  const [isQueueOpen, setIsQueueOpen] = useState(true);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(true);
+
+  const currentTask = adhocTasks.find((t: Task) => t.id === pomodoro.taskId);
+  const targetTodo = tasks.find(t => t.id === targetTodoId);
+
+  const toggleObjectiveExpand = (id: string) => {
+    setExpandedObjectiveIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isObjectiveVisible = (task: Task) => {
+    if (!task.parentId) return true;
+    let currentParentId: string | null = task.parentId;
+    while (currentParentId) {
+      if (!expandedObjectiveIds.has(currentParentId)) return false;
+      const parent = tasks.find(t => t.id === currentParentId);
+      currentParentId = parent?.parentId || null;
+    }
+    return true;
+  };
 
   const startNextInQueue = () => {
     if (queue.length > 0) {
@@ -157,10 +204,36 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
     }
   };
 
-  // 完了済み・デイリーを除外した基本タスク一覧
-  const baseTasks = tasks.filter((t: Task) => t.status !== 'done' && t.routineType !== 'daily');
-  const parentTasks = baseTasks.filter(t => !t.parentId).sort((a,b) => a.order - b.order);
-  const searchResults = baseTasks.filter(t => t.text.toLowerCase().includes(searchQuery.toLowerCase()));
+  const handleCompleteTask = async (id: string) => {
+    if (id.startsWith('adhoc-')) {
+      setAdhocTasks(prev => prev.filter(t => t.id !== id));
+      if (addCoins) await addCoins(50);
+    } else {
+      pomodoro.onToggleTask(id);
+    }
+  };
+
+  // 小窓モードの場合は、タイマーパネルのみを全画面で表示
+  if (isSubWindow) {
+    const currentTaskSub = adhocTasks.find((t: Task) => t.id === pomodoro.taskId);
+    const targetTodoSub = tasks.find(t => t.id === targetTodoId);
+
+    return (
+      <div className="w-screen h-screen bg-slate-900 select-none overflow-hidden border-2 border-orange-500/30 rounded-lg" data-tauri-drag-region>
+        <TimerPanel 
+          isPiP={true} 
+          pomodoro={pomodoro} 
+          queue={queue} 
+          allTasks={adhocTasks} 
+          currentTask={currentTaskSub}
+          targetTodo={targetTodoSub}
+          startNextInQueue={() => { if (queue.length > 0) pomodoro.startWork(queue[0]); }}
+          onToggleTask={handleCompleteTask}
+          onRemoveFromQueue={onRemoveFromQueue}
+        />
+      </div>
+    );
+  }
 
   const handleAddAdhoc = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +245,20 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
     setAdhocTasks(prev => [...prev, newTask]);
     onAddToQueue(newTask.id);
     setAdhocText('');
+  };
+
+  const handleAddRoutineToQueue = (routine: Routine) => {
+    const newTask: Task = {
+      id: `adhoc-${Date.now()}`,
+      text: `🔄 ${routine.text}`,
+      status: 'todo',
+      parentId: null,
+      order: 0,
+      difficulty: 1,
+      routineId: routine.id
+    };
+    setAdhocTasks(prev => [...prev, newTask]);
+    onAddToQueue(newTask.id);
   };
 
   const handleAddSingleTemplateTask = (taskName: string) => {
@@ -193,88 +280,17 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
     setEditTplTasks(tpl.subTasks.join(', '));
   };
 
-  const toggleTaskExpand = (id: string) => {
-    const newSet = new Set(expandedTaskIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setExpandedTaskIds(newSet);
-  };
-
-  const isTaskAvailable = (id: string) => !queue.includes(id) && pomodoro.taskId !== id;
-
-  // --- タスクツリーのレンダリング関数 ---
-  const renderTask = (task: Task, level = 0) => {
-    const children = baseTasks.filter(t => t.parentId === task.id).sort((a,b)=>a.order - b.order);
-    const isExpanded = expandedTaskIds.has(task.id);
-    const available = isTaskAvailable(task.id);
-    
-    return (
-      <div key={task.id} className="flex flex-col">
-        <div className={`flex items-center gap-1.5 sm:gap-2 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-white/50 transition-colors group ${level > 0 ? 'ml-3 sm:ml-4 border-l-2 border-orange-200/50 pl-2' : ''}`}>
-          {children.length > 0 ? (
-            <button onClick={() => toggleTaskExpand(task.id)} className="p-1 hover:bg-white/60 rounded text-gray-500 transition-colors">
-              {isExpanded ? <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4"/> : <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4"/>}
-            </button>
-          ) : (
-            <div className="w-5.5 h-5.5 sm:w-6 sm:h-6 flex-shrink-0" />
-          )}
-          
-          <span className={`flex-1 text-xs sm:text-sm truncate ${available ? 'text-gray-700' : 'text-gray-400 line-through'}`}>
-            {task.text}
-          </span>
-          
-          {available ? (
-            <button onClick={() => onAddToQueue(task.id)} className="p-1 sm:p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 shadow-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="キューに追加">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <div className="p-1 sm:p-1.5 text-gray-400 flex-shrink-0" title="追加済み">
-              <Check className="w-3.5 h-3.5" />
-            </div>
-          )}
-        </div>
-        {isExpanded && children.length > 0 && (
-          <div className="flex flex-col mt-0.5 sm:mt-1 gap-0.5 sm:gap-1">
-            {children.map(child => renderTask(child, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // 検索結果のレンダリング
-  const renderSearchResults = () => {
-    if (!searchQuery) {
-      if (parentTasks.length === 0) return <p className="text-xs text-center text-gray-400 py-4">タスクがありません</p>;
-      return parentTasks.map(t => renderTask(t, 0));
-    } else {
-      if (searchResults.length === 0) return <p className="text-xs text-center text-gray-400 py-4">見つかりませんでした</p>;
-      return searchResults.map(t => {
-        const parent = t.parentId ? tasks.find(pt => pt.id === t.parentId) : null;
-        const available = isTaskAvailable(t.id);
-        return (
-          <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/50 transition-colors">
-            <div className="w-5 h-5 flex-shrink-0" />
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {parent && <span className="text-[10px] text-gray-400 truncate">{parent.text}</span>}
-              <span className={`text-sm truncate ${available ? 'text-gray-700' : 'text-gray-400 line-through'}`}>{t.text}</span>
-            </div>
-            {available ? (
-              <button onClick={() => onAddToQueue(t.id)} className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 shadow-sm flex-shrink-0">
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <div className="p-1.5 text-gray-400 flex-shrink-0">
-                <Check className="w-3.5 h-3.5" />
-              </div>
-            )}
-          </div>
-        )
-      });
-    }
-  };
-
   const togglePiP = async () => {
+    // Tauri環境（デスクトップ）の場合の処理
+    if ((window as any).__TAURI_INTERNALS__) {
+      try {
+        await invoke('open_sub_window');
+        return;
+      } catch (error) {
+        console.error("Tauri window creation failed:", error);
+      }
+    }
+
     if (!('documentPictureInPicture' in window)) {
       alert('お使いのブラウザは小窓化機能に対応していません。\nChrome または Edge の最新版をご利用ください。');
       return;
@@ -302,8 +318,14 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
           }
         }
       });
-      win.document.body.className = "m-0 p-0 w-full h-[100vh] overflow-hidden bg-slate-50";
-      win.addEventListener('pagehide', () => setPipWindow(null));
+      win.document.body.className = "m-0 p-0 w-full h-[100vh] overflow-hidden bg-slate-900";
+      win.addEventListener('pagehide', async () => {
+        if ((window as any).__TAURI__) {
+          const { appWindow } = await import('@tauri-apps/api/window' as any);
+          await appWindow.setAlwaysOnTop(false);
+        }
+        setPipWindow(null);
+      });
       setPipWindow(win);
     } catch (error) {
       console.error('PiP Error:', error);
@@ -312,64 +334,117 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
   };
 
   return (
-<div className="w-full h-full flex max-w-[1400px] mx-auto p-4 sm:p-6 gap-4 sm:gap-6 animate-fadeIn relative overflow-hidden">
-      {/* 左側：TODOタスク一覧（ツリー表示） */}
-      <div className="w-[30%] h-full min-w-[280px] flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden">
-        
+    <div className="w-full h-full flex max-w-[1600px] mx-auto p-4 sm:p-6 gap-4 sm:gap-6 animate-fadeIn relative overflow-hidden">
+      {/* 左側：即席追加 ＆ ルーチン */}
+      <div className="w-[25%] h-full min-w-[300px] flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-white/50 bg-white/50 z-10">
-          <h2 className="font-bold text-gray-700 flex items-center gap-2 mb-3">
-            <ListTodo className="w-5 h-5 text-blue-500" />
-            タスク一覧 (TODO)
-          </h2>
+          <div className="flex items-center gap-2 mb-4">
+             <Sparkles className="w-5 h-5 text-orange-500" />
+             <h2 className="font-black text-gray-700 text-sm tracking-widest uppercase">Quick Start</h2>
+          </div>
           <form onSubmit={handleAddAdhoc} className="mb-2 flex gap-2">
-            <input type="text" placeholder="＋ 即席タスク (保存不要)..." value={adhocText} onChange={e => setAdhocText(e.target.value)} className="flex-1 px-3 py-1.5 rounded-lg bg-white/70 border-none outline-none focus:ring-2 focus:ring-blue-300 text-xs sm:text-sm text-gray-800 placeholder-gray-400 shadow-sm" />
+            <input type="text" placeholder="＋ 今から何をやる？" value={adhocText} onChange={e => setAdhocText(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-white/70 border-none outline-none focus:ring-2 focus:ring-orange-300 text-xs sm:text-sm text-gray-800 placeholder-gray-400 shadow-sm" />
             <button type="submit" className="bg-blue-500 text-white px-3 rounded-lg text-sm font-bold hover:bg-blue-600 shadow-sm transition-colors"><Zap className="w-4 h-4" /></button>
           </form>
-          <input type="text" placeholder="🔍 タスクを検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full px-3 py-1.5 rounded-lg bg-white/70 border-none outline-none focus:ring-2 focus:ring-orange-300 text-xs sm:text-sm text-gray-800 font-medium placeholder-gray-400 shadow-sm" />
         </div>
         
-        <div className="flex-1 overflow-y-auto p-2 bg-white/20 pb-10">
-          {renderSearchResults()}
+        <div className="flex-1 overflow-y-auto p-2 bg-white/20 pb-10 space-y-4">
+          <section>
+             <button onClick={() => setIsTasksOpen(!isTasksOpen)} className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-black text-orange-400 uppercase tracking-widest hover:text-orange-600 transition-colors">
+               <span className="flex items-center gap-1"><Target className="w-3 h-3"/> Objectives</span>
+               {isTasksOpen ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
+             </button>
+             {isTasksOpen && (
+               <div className="mt-1 space-y-0.5 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
+                 {tasks
+                   .filter(t => t.routineType !== 'daily' && t.status !== 'done' && isObjectiveVisible(t))
+                   .map(t => {
+                     const hasChildren = tasks.some(child => child.parentId === t.id && child.status !== 'done');
+                     const isExpanded = expandedObjectiveIds.has(t.id);
+                     const indent = getTaskIndent(t.id, tasks);
+                     
+                     return (
+                       <div key={t.id} className="flex items-center group">
+                         <div style={{ paddingLeft: `${indent * 12}px` }} className="flex items-center">
+                           {hasChildren ? (
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); toggleObjectiveExpand(t.id); }} 
+                               className="p-1 hover:bg-black/5 rounded text-gray-400 transition-colors"
+                             >
+                               {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                             </button>
+                           ) : (
+                             <div className="w-5 h-5" />
+                           )}
+                         </div>
+                         <button 
+                           onClick={() => setTargetTodoId(targetTodoId === t.id ? null : t.id)} 
+                           className={`flex-1 text-left px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-2 ${targetTodoId === t.id ? 'bg-orange-500/10 text-orange-600 font-bold' : 'text-gray-500 hover:bg-white/50'}`}
+                         >
+                            <Check className={`w-3 h-3 flex-shrink-0 ${targetTodoId === t.id ? 'opacity-100' : 'opacity-0'}`}/>
+                            <span className="truncate">{t.text}</span>
+                         </button>
+                       </div>
+                     );
+                   })
+                 }
+               </div>
+             )}
+          </section>
+
+          <section>
+             <button onClick={() => setIsRoutinesOpen(!isRoutinesOpen)} className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+               <span className="flex items-center gap-1"><Repeat className="w-3 h-3"/> Rituals</span>
+               {isRoutinesOpen ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
+             </button>
+             {isRoutinesOpen && (
+               <div className="mt-1 space-y-1">
+                 {routines.filter(r => r.type === 'daily').map(r => (
+                   <button key={r.id} onClick={() => handleAddRoutineToQueue(r)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/50 text-xs text-gray-600 text-left group transition-all">
+                      <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 text-indigo-500"/>
+                      <span className="truncate">{r.text}</span>
+                   </button>
+                 ))}
+               </div>
+             )}
+          </section>
         </div>
       </div>
 
-      {/* 右側：タイマー、キュー、テンプレート */}
       <div className="flex-1 flex flex-col gap-4 sm:gap-6 relative h-full overflow-hidden">
-        
-        {/* 右側上部：Timer Panel */}
-        <div className="flex-[1.4] h-0 min-h-[300px] relative overflow-hidden rounded-2xl shadow-sm">
+        <div className="flex-[1.8] h-0 min-h-[350px] relative overflow-hidden rounded-3xl shadow-sm border border-white/50">
           {pipWindow ? (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-white/30 backdrop-blur-md rounded-2xl border border-white/50 border-dashed">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 rounded-3xl">
               <ExternalLink className="w-16 h-16 text-blue-300 mb-4 animate-pulse" />
-              <h2 className="text-xl font-bold text-gray-500 mb-4">最前面の小窓で実行中...</h2>
-              <button onClick={() => pipWindow.close()} className="px-6 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full font-bold transition-colors shadow-sm">画面に戻す</button>
-              {createPortal(<TimerPanel isPiP={true} pipWindow={pipWindow} pomodoro={pomodoro} queue={queue} allTasks={allTasks} currentTask={currentTask} startNextInQueue={startNextInQueue} onToggleTask={onToggleTask} onRemoveFromQueue={onRemoveFromQueue} />, pipWindow.document.body)}
+              {createPortal(<TimerPanel isPiP={true} pipWindow={pipWindow} pomodoro={pomodoro} queue={queue} allTasks={adhocTasks} currentTask={currentTask} targetTodo={targetTodo} startNextInQueue={startNextInQueue} onToggleTask={handleCompleteTask} onRemoveFromQueue={onRemoveFromQueue} />, pipWindow.document.body)}
             </div>
           ) : (
-            <TimerPanel isPiP={false} pipWindow={null} pomodoro={pomodoro} queue={queue} allTasks={allTasks} currentTask={currentTask} startNextInQueue={startNextInQueue} onToggleTask={onToggleTask} onRemoveFromQueue={onRemoveFromQueue} />
+            <TimerPanel isPiP={false} pipWindow={null} pomodoro={pomodoro} queue={queue} allTasks={adhocTasks} currentTask={currentTask} targetTodo={targetTodo} startNextInQueue={startNextInQueue} onToggleTask={handleCompleteTask} onRemoveFromQueue={onRemoveFromQueue} />
           )}
         </div>
 
-        {/* 右側下部：左右分割 (Queue & Templates) */}
         <div className="flex-1 h-0 min-h-[250px] flex gap-4 sm:gap-6">
-          
-          {/* 左半分：Focus Queue */}
-          <div className="w-1/2 flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden">
+          <div className={`flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden transition-all duration-300 ${isQueueOpen ? 'w-1/2' : 'w-12'}`}>
             <div className="p-3 sm:p-4 border-b border-white/50 bg-white/50 flex justify-between items-center z-10">
-              <h2 className="font-bold text-gray-700 flex items-center gap-2 text-sm sm:text-base">
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
-                Focus Queue
-              </h2>
-              {!pipWindow && pomodoro.mode !== 'idle' && (
-                <button onClick={togglePiP} className="flex items-center gap-1 px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] sm:text-xs font-bold rounded-lg transition-colors shadow-sm" title="常に最前面で表示">
-                  <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />小窓化
-                </button>
-              )}
+              {isQueueOpen ? (
+                <>
+                  <h2 className="font-bold text-gray-700 flex items-center gap-2 text-sm">
+                    <Plus className="w-4 h-4 text-orange-500" /> Focus Queue
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {!pipWindow && pomodoro.mode !== 'idle' && (
+                      <button onClick={togglePiP} className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg shadow-sm transition-colors" title="常に最前面">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button onClick={() => setIsQueueOpen(false)} className="p-1 hover:bg-black/5 rounded"><ChevronDown className="w-4 h-4 rotate-90"/></button>
+                  </div>
+                </>
+              ) : <button onClick={() => setIsQueueOpen(true)} className="mx-auto p-1 hover:bg-black/5 rounded"><ChevronDown className="w-4 h-4 -rotate-90"/></button>}
             </div>
-
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 bg-black/5">
+            {isQueueOpen && <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 bg-black/5">
               {queue.map((id, index) => {
-                const t = allTasks.find((task: Task) => task.id === id); 
+                const t = adhocTasks.find((task: Task) => task.id === id); 
                 if (!t) return null;
                 return (
                   <div key={id} className="flex items-center justify-between p-2.5 bg-white/60 rounded-xl border border-white/50 shadow-sm group hover:border-orange-200 transition-colors">
@@ -385,25 +460,24 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
                 );
               })}
               {queue.length === 0 && <p className="text-xs sm:text-sm text-center text-gray-400 py-10">キューは空です</p>}
-            </div>
+            </div>}
           </div>
 
-          {/* 右半分：テンプレート */}
-          <div className="w-1/2 flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden">
+          <div className={`flex flex-col bg-white/40 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm overflow-hidden transition-all duration-300 ${isTemplatesOpen ? 'flex-1' : 'w-12'}`}>
             <div className="p-3 sm:p-4 border-b border-white/50 bg-white/50 flex items-center justify-between z-10">
-              <h2 className="text-sm sm:text-base font-bold text-gray-700 flex items-center gap-2">
-                <LibraryBig className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" /> テンプレート
-              </h2>
-              <button 
-                onClick={() => setIsAddingTemplate(!isAddingTemplate)}
-                className="text-[10px] font-bold px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 flex items-center gap-1 transition-colors shadow-sm"
-              >
-                {isAddingTemplate ? <X className="w-3 h-3"/> : <Plus className="w-3 h-3"/>}
-                {isAddingTemplate ? '閉じる' : '新規作成'}
-              </button>
+              {isTemplatesOpen ? (
+                <>
+                  <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <LibraryBig className="w-4 h-4 text-blue-500" /> Blueprints
+                  </h2>
+                  <button onClick={() => setIsAddingTemplate(!isAddingTemplate)} className="text-[10px] font-bold px-2 py-1 bg-blue-100 text-blue-600 rounded flex items-center gap-1 transition-colors">
+                    {isAddingTemplate ? <X className="w-3 h-3"/> : <Plus className="w-3 h-3"/>}
+                  </button>
+                  <button onClick={() => setIsTemplatesOpen(false)} className="p-1 hover:bg-black/5 rounded ml-1"><ChevronDown className="w-4 h-4 rotate-90"/></button>
+                </>
+              ) : <button onClick={() => setIsTemplatesOpen(true)} className="mx-auto p-1 hover:bg-black/5 rounded"><ChevronDown className="w-4 h-4 -rotate-90"/></button>}
             </div>
-
-            <div className="flex-1 overflow-y-auto p-3 bg-white/20">
+            {isTemplatesOpen && <div className="flex-1 overflow-y-auto p-3 bg-white/20">
               {isAddingTemplate && (
                 <div className="mb-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col gap-2 animate-fadeIn shadow-sm">
                   <input 
@@ -488,6 +562,7 @@ export const PomodoroView: React.FC<PomodoroViewProps> = ({
                 )}
               </div>
             </div>
+          }
           </div>
           
         </div>

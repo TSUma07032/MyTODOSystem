@@ -1,10 +1,10 @@
 import { AppProvider } from './hooks/AppContext';
-import { AppLayout } from './components/layout/AppLayout';
+import {ChoiceLayout} from './components/layout/ChoiceLayout';
 
 function App() {
   return (
     <AppProvider>
-      <AppLayout />
+      <ChoiceLayout />
     </AppProvider>
   );
 }

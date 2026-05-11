@@ -7,7 +7,9 @@ import { useAppController } from './useAppController';
  */
 type AppContextType = ReturnType<typeof useAppController>;
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+// コンテキストの作成
+// Tauriの小窓に情報を渡すため、AppContextは全てのレイアウトで共通して使用する形に変更
+export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const controller = useAppController();
